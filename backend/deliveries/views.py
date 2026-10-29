@@ -194,6 +194,9 @@ class CancelDeliveryView(views.APIView):
             package = delivery.match.package
             user = request.user
 
+            if user.role != 'admin' and delivery.match.commuter_route.commuter != user and package.vendor.user != user:
+                return Response({'detail': 'Permission denied: Only the assigned commuter or vendor can cancel this delivery.'}, status=status.HTTP_403_FORBIDDEN)
+
             if delivery.status in ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED']:
                 return Response(
                     {'detail': f'Cannot cancel after pickup has occurred (status: {delivery.status}).'},

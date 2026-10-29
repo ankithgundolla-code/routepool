@@ -19,6 +19,8 @@ class PackageMatchesView(views.APIView):
     def get(self, request, package_id):
         try:
             package = Package.objects.get(pk=package_id)
+            if request.user.role == 'vendor' and package.vendor.user != request.user:
+                return Response({'detail': 'Permission denied: You can only view matches for your own packages.'}, status=status.HTTP_403_FORBIDDEN)
             # Re-run or get matches
             matches = Match.objects.filter(package=package, status__in=['PROPOSED', 'REQUESTED', 'ACCEPTED'])
             if not matches.exists() and package.status == 'SEARCHING':
@@ -39,6 +41,8 @@ class PackageMatchesView(views.APIView):
     def post(self, request, package_id):
         try:
             package = Package.objects.get(pk=package_id)
+            if request.user.role == 'vendor' and package.vendor.user != request.user:
+                return Response({'detail': 'Permission denied: You can only compute matches for your own packages.'}, status=status.HTTP_403_FORBIDDEN)
             matches = MatchingService.find_and_record_matches(package)
             serializer = MatchSerializer(matches, many=True)
             return Response({
@@ -84,6 +88,8 @@ class RequestMatchView(views.APIView):
     def post(self, request, pk):
         try:
             match = Match.objects.get(pk=pk)
+            if request.user.role != 'admin' and match.package.vendor.user != request.user:
+                return Response({'detail': 'Permission denied: Only the package vendor can request this match.'}, status=status.HTTP_403_FORBIDDEN)
             match.status = 'REQUESTED'
             match.save()
 
