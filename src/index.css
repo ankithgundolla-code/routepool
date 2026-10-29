@@ -1,0 +1,62 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* Leaflet dark theme tweaks */
+.leaflet-container {
+  background-color: #0f172a !important;
+  font-family: inherit;
+}
+
+/* RoutePool dark map styling for watermark-free OpenStreetMap tiles */
+.routepool-dark-tiles .leaflet-tile {
+  filter: brightness(0.65) invert(1) contrast(2.4) hue-rotate(200deg) saturate(0.28);
+}
+
+.leaflet-popup-content-wrapper {
+  background-color: #ffffff;
+  color: #0f172a;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  font-size: 12px;
+}
+
+.leaflet-popup-tip {
+  background-color: #ffffff;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #090d16;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Remove browser increment/decrement number spinners */
+/* Chrome, Safari, Edge, Opera */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button,
+.no-spinners::-webkit-outer-spin-button,
+.no-spinners::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* Firefox */
+input[type="number"],
+.no-spinners {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+

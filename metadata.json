@@ -1,0 +1,8 @@
+{
+  "name": "RoutePool - Hyperlocal Eco-Friendly Logistics",
+  "description": "Hyperlocal package pooling platform connecting local vendors with commuters already travelling along similar routes using minimum-detour matching.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
