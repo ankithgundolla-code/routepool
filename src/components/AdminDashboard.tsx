@@ -50,7 +50,7 @@ export const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -148,7 +148,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Tab 1: Deliveries Table */}
         {activeTab === 'deliveries' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
+            <table className="w-full min-w-[640px] text-left text-xs text-slate-300">
               <thead className="bg-slate-950/60 text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-800">
                 <tr>
                   <th className="py-2.5 px-3">Delivery ID</th>
@@ -188,7 +188,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Tab 2: Transactions Table */}
         {activeTab === 'transactions' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
+            <table className="w-full min-w-[640px] text-left text-xs text-slate-300">
               <thead className="bg-slate-950/60 text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-800">
                 <tr>
                   <th className="py-2.5 px-3">Tx ID</th>
@@ -222,7 +222,7 @@ export const AdminDashboard: React.FC = () => {
         {/* Tab 3: Packages Pool Table */}
         {activeTab === 'packages' && (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
+            <table className="w-full min-w-[640px] text-left text-xs text-slate-300">
               <thead className="bg-slate-950/60 text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-800">
                 <tr>
                   <th className="py-2.5 px-3">Pkg ID</th>

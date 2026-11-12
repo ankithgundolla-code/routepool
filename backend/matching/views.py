@@ -21,18 +21,26 @@ class PackageMatchesView(views.APIView):
             package = Package.objects.get(pk=package_id)
             if request.user.role == 'vendor' and package.vendor.user != request.user:
                 return Response({'detail': 'Permission denied: You can only view matches for your own packages.'}, status=status.HTTP_403_FORBIDDEN)
+
             # Re-run or get matches
             matches = Match.objects.filter(package=package, status__in=['PROPOSED', 'REQUESTED', 'ACCEPTED'])
             if not matches.exists() and package.status == 'SEARCHING':
-                MatchingService.find_and_record_matches(package)
-                matches = Match.objects.filter(package=package, status__in=['PROPOSED', 'REQUESTED', 'ACCEPTED'])
+                sorted_matches = MatchingService.find_and_record_matches(package)
+            else:
+                level_order = {'EXACT': 1, 'NEARBY': 2, 'EXTENDED': 3}
+                sorted_matches = sorted(
+                    list(matches),
+                    key=lambda m: (level_order.get(m.match_level, 4), -m.final_score, m.estimated_detour)
+                )
+                for rank_idx, m_obj in enumerate(sorted_matches, start=1):
+                    m_obj.rank = rank_idx
 
-            serializer = MatchSerializer(matches, many=True)
+            serializer = MatchSerializer(sorted_matches, many=True)
             return Response({
                 'package_id': package.id,
                 'package_name': package.package_name,
                 'package_status': package.status,
-                'total_matches': matches.count(),
+                'total_matches': len(sorted_matches),
                 'matches': serializer.data
             })
         except Package.DoesNotExist:
@@ -63,20 +71,30 @@ class CommuterOpportunitiesView(views.APIView):
         if not routes.exists():
             return Response({
                 'routes_count': 0,
+                'opportunities_count': 0,
                 'opportunities': [],
                 'message': 'No active commuter routes registered yet.'
             })
 
-        # Find matches for all active routes of commuter
+        # Find active available opportunities for all active routes of commuter
         matches = Match.objects.filter(
             commuter_route__in=routes,
-            package__status__in=['SEARCHING', 'MATCHED']
+            status__in=['PROPOSED', 'REQUESTED'],
+            package__status='SEARCHING'
         ).select_related('package', 'commuter_route', 'package__vendor')
 
-        serializer = MatchSerializer(matches, many=True)
+        level_order = {'EXACT': 1, 'NEARBY': 2, 'EXTENDED': 3}
+        sorted_matches = sorted(
+            list(matches),
+            key=lambda m: (level_order.get(m.match_level, 4), -m.final_score, m.estimated_detour)
+        )
+        for rank_idx, m_obj in enumerate(sorted_matches, start=1):
+            m_obj.rank = rank_idx
+
+        serializer = MatchSerializer(sorted_matches, many=True)
         return Response({
             'routes_count': routes.count(),
-            'opportunities_count': matches.count(),
+            'opportunities_count': len(sorted_matches),
             'opportunities': serializer.data
         })
 
@@ -158,7 +176,7 @@ class AcceptMatchView(views.APIView):
             # Reject/cancel other proposed matches for this package
             Match.objects.filter(package=package).exclude(pk=match.pk).update(status='REJECTED')
 
-            # Generate 4-digit or 6-digit cryptographic OTPs for pickup and delivery
+            # Generate 6-digit cryptographic OTPs for pickup and delivery
             pickup_otp = f"{random.randint(100000, 999999)}"
             delivery_otp = f"{random.randint(100000, 999999)}"
 

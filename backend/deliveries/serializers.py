@@ -24,3 +24,41 @@ class DeliverySerializer(serializers.ModelSerializer):
             'picked_up_at', 'delivered_at', 'status', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+
+        if not user or not user.is_authenticated:
+            data['pickup_otp'] = None
+            data['delivery_otp'] = None
+            return data
+
+        is_admin = getattr(user, 'role', '') == 'admin' or user.is_staff or user.is_superuser
+        is_vendor = False
+        try:
+            if getattr(user, 'role', '') == 'vendor':
+                is_vendor = (
+                    hasattr(instance, 'match') and
+                    instance.match and
+                    instance.match.package and
+                    instance.match.package.vendor and
+                    instance.match.package.vendor.user_id == user.id
+                )
+        except Exception:
+            is_vendor = False
+
+        # Security Policy:
+        # - Admin: full operational access
+        # - Origin Vendor: holds pickup_otp to display to commuter; receives delivery_otp on completion
+        # - Commuter (or unauthorized caller):
+        #   Must NEVER see pickup_otp prior to pickup verification (must ask vendor physically)
+        #   Must NEVER see delivery_otp prior to delivery verification (must ask recipient physically)
+        if not (is_admin or is_vendor):
+            if not instance.pickup_verified:
+                data['pickup_otp'] = None
+            if not instance.delivery_verified:
+                data['delivery_otp'] = None
+
+        return data

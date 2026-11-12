@@ -87,7 +87,7 @@ export const OtpVerificationStation: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -228,7 +228,7 @@ export const OtpVerificationStation: React.FC = () => {
                   <div className="p-3 rounded-lg bg-slate-900 border border-amber-800/60 text-center shrink-0">
                     <div className="text-[10px] text-slate-400 uppercase font-semibold">Vendor's Screen Displays</div>
                     <div className="text-xl font-mono font-black text-amber-400 tracking-widest mt-0.5">
-                      {selectedDelivery.pickup_otp}
+                      {selectedDelivery.pickup_otp || '•••••• (Ask Vendor)'}
                     </div>
                   </div>
                 </div>
@@ -250,12 +250,14 @@ export const OtpVerificationStation: React.FC = () => {
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Verify Handover (Transit Start)</span>
                     </button>
-                    <button
-                      onClick={() => setPickupOtpInput(selectedDelivery.pickup_otp)}
-                      className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
-                    >
-                      Auto-fill OTP
-                    </button>
+                    {selectedDelivery.pickup_otp && (
+                      <button
+                        onClick={() => setPickupOtpInput(selectedDelivery.pickup_otp)}
+                        className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                      >
+                        Auto-fill OTP
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <div className="text-xs text-emerald-400 flex items-center gap-1.5 mt-2">
@@ -289,7 +291,7 @@ export const OtpVerificationStation: React.FC = () => {
                   <div className="p-3 rounded-lg bg-slate-900 border border-teal-800/60 text-center shrink-0">
                     <div className="text-[10px] text-slate-400 uppercase font-semibold">Recipient's OTP</div>
                     <div className="text-xl font-mono font-black text-teal-400 tracking-widest mt-0.5">
-                      {selectedDelivery.delivery_otp}
+                      {selectedDelivery.delivery_otp || '•••••• (Ask Recipient)'}
                     </div>
                   </div>
                 </div>
@@ -311,12 +313,14 @@ export const OtpVerificationStation: React.FC = () => {
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Complete Delivery & Disburse Reward</span>
                     </button>
-                    <button
-                      onClick={() => setDeliveryOtpInput(selectedDelivery.delivery_otp)}
-                      className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
-                    >
-                      Auto-fill OTP
-                    </button>
+                    {selectedDelivery.delivery_otp && (
+                      <button
+                        onClick={() => setDeliveryOtpInput(selectedDelivery.delivery_otp)}
+                        className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                      >
+                        Auto-fill OTP
+                      </button>
+                    )}
                   </div>
                 ) : selectedDelivery.delivery_verified ? (
                   <div className="text-xs text-emerald-400 flex items-center gap-1.5 mt-2">

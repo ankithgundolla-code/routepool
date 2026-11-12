@@ -1,6 +1,49 @@
 @import "tailwindcss";
 @import "leaflet/dist/leaflet.css";
 
+/* Global Viewport, Box Sizing & Document Canvas Reset */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100%;
+  background-color: #020617;
+  color: #f8fafc;
+  color-scheme: dark;
+  overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: #020617;
+  color: #f8fafc;
+  overflow-x: hidden;
+  position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background-color: #020617;
+  overflow-x: clip;
+}
+
 /* Leaflet dark theme tweaks */
 .leaflet-container {
   background-color: #0f172a !important;

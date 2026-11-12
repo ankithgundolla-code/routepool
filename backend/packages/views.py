@@ -1,4 +1,5 @@
 from rest_framework import generics, permissions, status, views
+from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from .models import Package
 from .serializers import PackageSerializer
@@ -14,13 +15,12 @@ class PackageListCreateView(generics.ListCreateAPIView):
             return Package.objects.all()
         if user.role == 'vendor':
             return Package.objects.filter(vendor__user=user)
-        # Commuters can view packages that are SEARCHING
-        return Package.objects.filter(status='SEARCHING')
+        # Commuters and non-vendors must not access the vendor package listing endpoint
+        raise PermissionDenied("Commuters cannot access vendor package listings. Use commuter opportunities instead.")
 
     def perform_create(self, serializer):
         user = self.request.user
         if user.role not in ['vendor', 'admin']:
-            from rest_framework.exceptions import PermissionDenied
             raise PermissionDenied("Only registered vendors or administrators can dispatch packages.")
         vendor, _ = Vendor.objects.get_or_create(
             user=user,
@@ -35,7 +35,8 @@ class PackageListCreateView(generics.ListCreateAPIView):
             from matching.services import MatchingService
             MatchingService.find_and_record_matches(package)
         except Exception as e:
-            print(f"Auto-matching error: {e}")
+            import logging
+            logging.getLogger(__name__).warning("Auto-matching error for package %s: %s", package.id, e)
 
 class PackageDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = PackageSerializer
@@ -47,7 +48,7 @@ class PackageDetailView(generics.RetrieveUpdateDestroyAPIView):
             return Package.objects.all()
         if user.role == 'vendor':
             return Package.objects.filter(vendor__user=user)
-        return Package.objects.all()
+        raise PermissionDenied("Permission denied: You can only view details for your own packages.")
 
 class PackageCancelView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -56,7 +57,7 @@ class PackageCancelView(views.APIView):
         try:
             package = Package.objects.get(pk=pk)
             if request.user.role != 'admin' and package.vendor.user != request.user:
-                return Response({'detail': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+                return Response({'detail': 'Permission denied: Only the package vendor or administrator can cancel this package.'}, status=status.HTTP_403_FORBIDDEN)
 
             if package.status in ['PICKED_UP', 'IN_TRANSIT', 'DELIVERED']:
                 return Response({'detail': f'Cannot cancel package in {package.status} status.'}, status=status.HTTP_400_BAD_REQUEST)

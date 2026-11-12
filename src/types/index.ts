@@ -105,6 +105,25 @@ export interface Match {
   offered_reward: number;
   commuter_earnings: number;
   platform_fee: number;
+  rank?: number;
+  route_overlap_percentage?: number | null;
+  scoring_breakdown?: Record<string, number>;
+  feasibility_checks?: {
+    is_eligible?: boolean;
+    day_matched?: boolean;
+    remaining_capacity_kg?: number;
+    package_weight_kg?: number;
+    active_deliveries_count?: number;
+    estimated_pickup_time?: string;
+    estimated_dropoff_time?: string;
+    pickup_slack_mins?: number;
+    deadline_margin_mins?: number;
+    overlap_available?: boolean;
+    route_overlap_percentage?: number | null;
+    direction_cosine?: number;
+    reason?: string | null;
+  };
+  disqualification_reason?: string | null;
   created_at: string;
 }
 

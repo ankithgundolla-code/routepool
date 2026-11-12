@@ -51,6 +51,12 @@ export default function App() {
   // Initialize session from backend on page load / refresh
   useEffect(() => {
     initApp();
+
+    const handleAuthExpired = () => {
+      handleLogout();
+    };
+    window.addEventListener('routepool_auth_expired', handleAuthExpired);
+    return () => window.removeEventListener('routepool_auth_expired', handleAuthExpired);
   }, []);
 
   const initApp = async () => {
@@ -135,7 +141,7 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-slate-300">
+      <div className="min-h-screen w-full bg-slate-950 flex flex-col items-center justify-center text-slate-300">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-950/50 animate-bounce mb-4">
           <Compass className="w-7 h-7 text-slate-950 font-black" />
         </div>
@@ -146,7 +152,7 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
+    <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-slate-950">
       {/* Global Navigation Bar */}
       <Navbar
         currentUser={currentUser}
@@ -156,7 +162,7 @@ export default function App() {
       />
 
       {/* Main View Container */}
-      <main className="flex-1">
+      <main className="flex-1 w-full flex flex-col min-w-0">
         {/* Route: /auth */}
         {currentPath === '/auth' && (
           <AuthPage

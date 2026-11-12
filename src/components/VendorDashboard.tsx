@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Package as PackageIcon,
   Plus,
@@ -84,11 +84,161 @@ export const VendorDashboard: React.FC = () => {
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [modalError, setModalError] = useState<string | null>(null);
 
+  // Polling control refs & timer references
+  const isMountedRef = useRef<boolean>(true);
+  const isPollingBusyRef = useRef<boolean>(false);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const statusNoticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitialLoadRef = useRef<boolean>(true);
+
+  // Status tracking & notification deduplication
+  const knownPackageStatusesRef = useRef<Map<number, string>>(new Map());
+  const selectedPackageIdRef = useRef<number | null>(null);
+
+  // Visual real-time indicators
+  const [highlightedPackageIds, setHighlightedPackageIds] = useState<Set<number>>(new Set());
+  const [statusNotice, setStatusNotice] = useState<{
+    message: string;
+    packageName: string;
+    status: string;
+  } | null>(null);
+
   useEffect(() => {
-    loadData();
+    selectedPackageIdRef.current = selectedPackage?.id ?? null;
+  }, [selectedPackage]);
+
+  const handleSelectPackageForMatches = useCallback(async (pkg: Package) => {
+    setSelectedPackage(pkg);
+    setMatchesLoading(true);
+    setSelectedMatchForMap(null);
+    try {
+      const data = await api.getPackageMatches(pkg.id);
+      setPackageMatches(data.matches);
+      if (data.matches.length > 0) {
+        const accepted = data.matches.find(m => m.status === 'ACCEPTED');
+        setSelectedMatchForMap(accepted || data.matches[0]);
+      }
+    } catch (e: any) {
+      console.error(e);
+    } finally {
+      setMatchesLoading(false);
+    }
   }, []);
 
-  const loadData = async () => {
+  // Safe background polling loop (~5 seconds)
+  const pollVendorData = useCallback(async () => {
+    if (!isMountedRef.current || document.hidden || isPollingBusyRef.current) {
+      return;
+    }
+    isPollingBusyRef.current = true;
+    try {
+      const [freshPkgs, freshStats] = await Promise.all([
+        api.getPackages(),
+        api.getVendorAnalytics().catch(() => null),
+      ]);
+
+      if (!isMountedRef.current) return;
+
+      if (freshPkgs && Array.isArray(freshPkgs)) {
+        if (isInitialLoadRef.current) {
+          freshPkgs.forEach(p => knownPackageStatusesRef.current.set(p.id, p.status));
+          isInitialLoadRef.current = false;
+          setPackages(freshPkgs);
+          if (freshStats) setAnalytics(freshStats);
+          if (freshPkgs.length > 0 && !selectedPackageIdRef.current) {
+            handleSelectPackageForMatches(freshPkgs[0]);
+          }
+        } else {
+          // Detect status transitions to alert the vendor
+          const changedPackageIds: number[] = [];
+          let latestStatusNotice: { message: string; packageName: string; status: string } | null = null;
+
+          for (const pkg of freshPkgs) {
+            const prevStatus = knownPackageStatusesRef.current.get(pkg.id);
+            if (prevStatus !== undefined && prevStatus !== pkg.status) {
+              changedPackageIds.push(pkg.id);
+              knownPackageStatusesRef.current.set(pkg.id, pkg.status);
+
+              let msg = `Package "${pkg.package_name}" status updated to ${pkg.status}.`;
+              if (pkg.status === 'MATCHED') {
+                msg = `Delivery accepted! Commuter assigned for "${pkg.package_name}".`;
+              } else if (pkg.status === 'IN_TRANSIT' || pkg.status === 'PICKED_UP') {
+                msg = `Pickup verified! "${pkg.package_name}" is now in transit.`;
+              } else if (pkg.status === 'DELIVERED') {
+                msg = `Delivered! "${pkg.package_name}" safely reached destination.`;
+              } else if (pkg.status === 'CANCELLED') {
+                msg = `Delivery cancelled for "${pkg.package_name}".`;
+              }
+
+              latestStatusNotice = {
+                message: msg,
+                packageName: pkg.package_name,
+                status: pkg.status,
+              };
+            } else if (prevStatus === undefined) {
+              knownPackageStatusesRef.current.set(pkg.id, pkg.status);
+            }
+          }
+
+          // Update package and stats state without triggering full-page loading screens
+          setPackages(freshPkgs);
+          if (freshStats) setAnalytics(freshStats);
+
+          // Synchronize currently selected package and its matches in the background
+          const currSelectedId = selectedPackageIdRef.current;
+          if (currSelectedId) {
+            const matchingSelected = freshPkgs.find(p => p.id === currSelectedId);
+            if (matchingSelected) {
+              setSelectedPackage(matchingSelected);
+
+              // Background update for matches of selected package
+              try {
+                const matchData = await api.getPackageMatches(matchingSelected.id);
+                if (isMountedRef.current && matchData?.matches) {
+                  setPackageMatches(matchData.matches);
+                  setSelectedMatchForMap(prev => {
+                    const accepted = matchData.matches.find(m => m.status === 'ACCEPTED');
+                    if (accepted) return accepted;
+                    if (!prev) return matchData.matches[0] || null;
+                    const updated = matchData.matches.find(m => m.id === prev.id);
+                    return updated || matchData.matches[0] || null;
+                  });
+                }
+              } catch {
+                // Ignore match polling error in background
+              }
+            }
+          }
+
+          // Trigger real-time status banner & temporary pulse highlights
+          if (changedPackageIds.length > 0 && latestStatusNotice) {
+            setStatusNotice(latestStatusNotice);
+            if (statusNoticeTimerRef.current) clearTimeout(statusNoticeTimerRef.current);
+            statusNoticeTimerRef.current = setTimeout(() => {
+              if (isMountedRef.current) setStatusNotice(null);
+            }, 7000);
+
+            setHighlightedPackageIds(new Set(changedPackageIds));
+            if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+            highlightTimerRef.current = setTimeout(() => {
+              if (isMountedRef.current) setHighlightedPackageIds(new Set());
+            }, 8000);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Vendor polling check error:', err);
+    } finally {
+      isPollingBusyRef.current = false;
+      if (isMountedRef.current && !document.hidden) {
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = setTimeout(pollVendorData, 5000);
+      }
+    }
+  }, [handleSelectPackageForMatches]);
+
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [pkgs, stats] = await Promise.all([
@@ -97,8 +247,14 @@ export const VendorDashboard: React.FC = () => {
       ]);
       setPackages(pkgs);
       if (stats) setAnalytics(stats);
-      if (pkgs.length > 0 && !selectedPackage) {
-        handleSelectPackageForMatches(pkgs[0]);
+      pkgs.forEach(p => knownPackageStatusesRef.current.set(p.id, p.status));
+      isInitialLoadRef.current = false;
+
+      if (pkgs.length > 0) {
+        const target = selectedPackageIdRef.current
+          ? pkgs.find(p => p.id === selectedPackageIdRef.current) || pkgs[0]
+          : pkgs[0];
+        handleSelectPackageForMatches(target);
       }
     } catch (e: any) {
       console.error(e);
@@ -106,24 +262,54 @@ export const VendorDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [handleSelectPackageForMatches]);
 
-  const handleSelectPackageForMatches = async (pkg: Package) => {
-    setSelectedPackage(pkg);
-    setMatchesLoading(true);
-    setSelectedMatchForMap(null);
-    try {
-      const data = await api.getPackageMatches(pkg.id);
-      setPackageMatches(data.matches);
-      if (data.matches.length > 0) {
-        setSelectedMatchForMap(data.matches[0]);
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // Load initial data, then start 5-second polling loop
+    loadData().then(() => {
+      if (isMountedRef.current && !document.hidden) {
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = setTimeout(pollVendorData, 5000);
       }
-    } catch (e: any) {
-      console.error(e);
-    } finally {
-      setMatchesLoading(false);
-    }
-  };
+    });
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      } else {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        pollVendorData();
+      }
+    };
+
+    const handleAuthExpired = () => {
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+      setFeedbackMsg({ text: 'Session expired. Please log in again.', type: 'error' });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('routepool_auth_expired', handleAuthExpired);
+
+    return () => {
+      isMountedRef.current = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('routepool_auth_expired', handleAuthExpired);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      if (statusNoticeTimerRef.current) clearTimeout(statusNoticeTimerRef.current);
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+    };
+  }, [loadData, pollVendorData]);
 
   const handleCreatePackage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -188,13 +374,15 @@ export const VendorDashboard: React.FC = () => {
         return <span className="inline-flex items-center gap-1.5 text-xs text-purple-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>In Transit</span>;
       case 'DELIVERED':
         return <span className="inline-flex items-center gap-1.5 text-xs text-emerald-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>Delivered</span>;
+      case 'CANCELLED':
+        return <span className="inline-flex items-center gap-1.5 text-xs text-red-400 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>Cancelled</span>;
       default:
         return <span className="text-xs text-slate-400 font-medium">{status}</span>;
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full">
       {/* Header and Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -262,6 +450,37 @@ export const VendorDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* Real-time Delivery Status Banner */}
+      {statusNotice && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="p-3.5 rounded-xl bg-emerald-950/80 border border-emerald-500/60 shadow-lg shadow-emerald-950/50 text-emerald-100 text-xs flex items-center justify-between transition-all duration-300"
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400"></span>
+            </span>
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-bold text-white text-sm">
+                {statusNotice.message}
+              </span>
+              <span className="text-[10px] font-bold text-slate-950 bg-emerald-400 px-2 py-0.5 rounded-full shadow-sm uppercase tracking-wider">
+                {statusNotice.status.replace('_', ' ')}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={() => setStatusNotice(null)}
+            className="p-1 rounded-lg text-emerald-400 hover:text-white hover:bg-emerald-900/40 transition-colors cursor-pointer"
+            title="Dismiss notification"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
@@ -295,7 +514,10 @@ export const VendorDashboard: React.FC = () => {
             <div>
               <h2 className="text-sm font-semibold text-slate-200">Registered Delivery Packages</h2>
               <span className="text-xs text-slate-400">
-                {statusFilter === 'ALL' ? packages.length : packages.filter(p => p.status === statusFilter).length} of {packages.length} records
+                {statusFilter === 'ALL'
+                  ? packages.length
+                  : packages.filter(p => statusFilter === 'IN_TRANSIT' || statusFilter === 'PICKED_UP' ? (p.status === 'IN_TRANSIT' || p.status === 'PICKED_UP') : p.status === statusFilter).length
+                } of {packages.length} records
               </span>
             </div>
             <div className="w-44">
@@ -307,9 +529,10 @@ export const VendorDashboard: React.FC = () => {
                 options={[
                   { value: 'ALL', label: 'All Packages' },
                   { value: 'SEARCHING', label: 'Searching Commuters', badge: 'Active' },
-                  { value: 'MATCHED', label: 'Matched Only' },
-                  { value: 'PICKED_UP', label: 'In Transit' },
-                  { value: 'DELIVERED', label: 'Delivered' }
+                  { value: 'MATCHED', label: 'Matched / Pending Pickup' },
+                  { value: 'IN_TRANSIT', label: 'In Transit' },
+                  { value: 'DELIVERED', label: 'Delivered' },
+                  { value: 'CANCELLED', label: 'Cancelled' }
                 ]}
               />
             </div>
@@ -323,16 +546,17 @@ export const VendorDashboard: React.FC = () => {
             <div className="p-8 text-center text-xs text-slate-400 bg-slate-900/30 rounded-xl border border-slate-800">
               No delivery requests yet. Click <strong>Create Delivery Request</strong> above to dispatch your first package!
             </div>
-          ) : packages.filter(p => statusFilter === 'ALL' || p.status === statusFilter).length === 0 ? (
+          ) : packages.filter(p => statusFilter === 'ALL' || (statusFilter === 'IN_TRANSIT' || statusFilter === 'PICKED_UP' ? (p.status === 'IN_TRANSIT' || p.status === 'PICKED_UP') : p.status === statusFilter)).length === 0 ? (
             <div className="p-8 text-center text-xs text-slate-400 bg-slate-900/30 rounded-xl border border-slate-800">
               No packages match the selected status filter.
             </div>
           ) : (
             <div className="space-y-3">
               {packages
-                .filter(p => statusFilter === 'ALL' || p.status === statusFilter)
+                .filter(p => statusFilter === 'ALL' || (statusFilter === 'IN_TRANSIT' || statusFilter === 'PICKED_UP' ? (p.status === 'IN_TRANSIT' || p.status === 'PICKED_UP') : p.status === statusFilter))
                 .map(pkg => {
                 const isSelected = selectedPackage?.id === pkg.id;
+                const isHighlighted = highlightedPackageIds.has(pkg.id);
                 return (
                   <div
                     key={pkg.id}
@@ -341,7 +565,7 @@ export const VendorDashboard: React.FC = () => {
                       isSelected
                         ? 'bg-slate-900 border-emerald-500/80 shadow-lg shadow-emerald-950/30'
                         : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
-                    }`}
+                    } ${isHighlighted ? 'ring-2 ring-emerald-400/90 shadow-md shadow-emerald-950/50' : ''}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -433,24 +657,60 @@ export const VendorDashboard: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <RouteMap
-                  startLat={selectedMatchForMap?.route_detail?.start_lat || selectedPackage.pickup_lat}
-                  startLng={selectedMatchForMap?.route_detail?.start_lng || selectedPackage.pickup_lng}
-                  startLabel={selectedMatchForMap?.route_detail?.start_location || selectedPackage.pickup_location}
-                  destLat={selectedMatchForMap?.route_detail?.dest_lat || selectedPackage.dest_lat}
-                  destLng={selectedMatchForMap?.route_detail?.dest_lng || selectedPackage.dest_lng}
-                  destLabel={selectedMatchForMap?.route_detail?.destination || selectedPackage.destination}
-                  waypoints={selectedMatchForMap?.route_detail?.intermediate_points || []}
-                  pickupLat={selectedPackage.pickup_lat}
-                  pickupLng={selectedPackage.pickup_lng}
-                  pickupLabel={selectedPackage.pickup_location}
-                  dropLat={selectedPackage.dest_lat}
-                  dropLng={selectedPackage.dest_lng}
-                  dropLabel={selectedPackage.destination}
-                  detourKm={selectedMatchForMap?.estimated_detour}
-                  className="h-64 w-full rounded-xl overflow-hidden border border-slate-800"
-                />
+                {!showCreateModal ? (
+                  <RouteMap
+                    startLat={selectedMatchForMap?.route_detail?.start_lat || selectedPackage.pickup_lat}
+                    startLng={selectedMatchForMap?.route_detail?.start_lng || selectedPackage.pickup_lng}
+                    startLabel={selectedMatchForMap?.route_detail?.start_location || selectedPackage.pickup_location}
+                    destLat={selectedMatchForMap?.route_detail?.dest_lat || selectedPackage.dest_lat}
+                    destLng={selectedMatchForMap?.route_detail?.dest_lng || selectedPackage.dest_lng}
+                    destLabel={selectedMatchForMap?.route_detail?.destination || selectedPackage.destination}
+                    waypoints={selectedMatchForMap?.route_detail?.intermediate_points || []}
+                    pickupLat={selectedPackage.pickup_lat}
+                    pickupLng={selectedPackage.pickup_lng}
+                    pickupLabel={selectedPackage.pickup_location}
+                    dropLat={selectedPackage.dest_lat}
+                    dropLng={selectedPackage.dest_lng}
+                    dropLabel={selectedPackage.destination}
+                    detourKm={selectedMatchForMap?.estimated_detour}
+                    className="h-64 w-full rounded-xl overflow-hidden border border-slate-800"
+                  />
+                ) : (
+                  <div className="h-64 w-full rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center text-xs text-slate-500">
+                    <span>Map paused while package dispatch is active</span>
+                  </div>
+                )}
               </div>
+
+              {/* Carrier Handover Banner if Commuter Accepted */}
+              {packageMatches.some(m => m.status === 'ACCEPTED') && (() => {
+                const acceptedMatch = packageMatches.find(m => m.status === 'ACCEPTED');
+                if (!acceptedMatch) return null;
+                return (
+                  <div className="p-3.5 rounded-xl bg-sky-950/50 border border-sky-700/70 shadow-md flex items-center justify-between text-xs text-sky-100">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-sky-900/60 border border-sky-700/80 flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-4 h-4 text-sky-400" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-white text-xs flex items-center gap-2">
+                          <span>Carrier Assigned: {acceptedMatch.commuter_name}</span>
+                          <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                            {acceptedMatch.commuter_reliability}% Reliability
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-300 mt-0.5">
+                          {acceptedMatch.route_detail?.route_name || 'Commuter Corridor'} (Detour: +{acceptedMatch.estimated_detour} km)
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="text-[10px] text-slate-400">Carrier Payout</div>
+                      <div className="font-bold text-emerald-400 text-sm">₹{acceptedMatch.commuter_earnings}</div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               <div className="space-y-3">
                 <div className="text-xs font-semibold text-slate-300">
@@ -479,38 +739,58 @@ export const VendorDashboard: React.FC = () => {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <div className="font-semibold text-white text-xs flex items-center gap-2">
-                              <span>#{idx + 1} {m.commuter_name}</span>
+                              <span>#{m.rank ?? idx + 1} {m.commuter_name}</span>
                               <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
                                 {m.final_score}% Match
                               </span>
+                              <span className="text-[10px] text-cyan-400 font-semibold bg-cyan-950/40 px-1.5 py-0.5 rounded border border-cyan-800/30">
+                                {m.match_level}
+                              </span>
                             </div>
-                            <div className="text-[11px] text-slate-400 mt-1">
-                              {m.route_detail?.route_name || 'Daily Transit'}
+                            <div className="text-[11px] text-slate-400 mt-1 flex items-center gap-2 flex-wrap">
+                              <span>{m.route_detail?.route_name || 'Daily Transit'}</span>
+                              {m.feasibility_checks?.remaining_capacity_kg !== undefined && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-slate-300 font-medium">
+                                    {m.feasibility_checks.remaining_capacity_kg}kg free
+                                  </span>
+                                </>
+                              )}
                             </div>
                           </div>
 
-                          <div className="text-right">
+                          <div className="text-right shrink-0">
                             <div className="text-xs font-bold text-emerald-400">+{m.estimated_detour} km</div>
-                            <div className="text-[10px] text-slate-500">Marginal Detour</div>
+                            <div className="text-[10px] text-slate-500">Detour</div>
                           </div>
                         </div>
 
-                        <div className="mt-3 pt-2.5 border-t border-slate-800/80 grid grid-cols-4 gap-1 text-[10px] text-slate-400">
+                        {/* Intelligent Route Compatibility & Feasibility Diagnostics */}
+                        <div className="mt-3 pt-2.5 border-t border-slate-800/80 grid grid-cols-4 gap-2 text-[10px] text-slate-400">
                           <div>
-                            <span className="text-slate-500 block">Corridor</span>
-                            <span className="text-slate-200 font-medium">{m.route_score}%</span>
+                            <span className="text-slate-500 block">Pickup Proximity</span>
+                            <span className="text-slate-200 font-medium">{m.pickup_distance} km</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block">Time Win</span>
-                            <span className="text-slate-200 font-medium">{m.time_score}%</span>
+                            <span className="text-slate-500 block">Drop Proximity</span>
+                            <span className="text-slate-200 font-medium">{m.destination_distance} km</span>
                           </div>
                           <div>
-                            <span className="text-slate-500 block">Reliability</span>
-                            <span className="text-slate-200 font-medium">{m.commuter_reliability}%</span>
+                            <span className="text-slate-500 block">Route Overlap</span>
+                            {m.route_overlap_percentage !== undefined && m.route_overlap_percentage !== null ? (
+                              <span className="text-emerald-400 font-semibold">{m.route_overlap_percentage}%</span>
+                            ) : (
+                              <span className="text-slate-400 font-medium" title="Derived from directional corridor alignment">Estimated</span>
+                            )}
                           </div>
                           <div>
-                            <span className="text-slate-500 block">Level</span>
-                            <span className="text-emerald-400 font-medium">{m.match_level}</span>
+                            <span className="text-slate-500 block">Deadline Buffer</span>
+                            {m.feasibility_checks?.deadline_margin_mins !== undefined ? (
+                              <span className="text-emerald-400 font-semibold">+{Math.round(m.feasibility_checks.deadline_margin_mins)}m safe</span>
+                            ) : (
+                              <span className="text-slate-200 font-medium">{m.time_score}% score</span>
+                            )}
                           </div>
                         </div>
 
@@ -529,6 +809,11 @@ export const VendorDashboard: React.FC = () => {
                               <Send className="w-3 h-3" />
                               <span>Request Commuter</span>
                             </button>
+                          ) : m.status === 'ACCEPTED' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-semibold bg-emerald-950/60 px-2 py-1 rounded-lg border border-emerald-800/50">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Carrier Accepted</span>
+                            </span>
                           ) : (
                             <span className="text-xs text-sky-400 font-semibold">{m.status}</span>
                           )}

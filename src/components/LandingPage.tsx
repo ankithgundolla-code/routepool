@@ -56,7 +56,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen text-slate-100 flex flex-col bg-slate-950 selection:bg-emerald-500 selection:text-slate-950">
+    <div className="w-full flex-1 flex flex-col bg-slate-950 text-slate-100 selection:bg-emerald-500 selection:text-slate-950">
       {/* 1. Hero Section */}
       <section className="relative pt-12 sm:pt-16 pb-16 sm:pb-20 overflow-hidden border-b border-slate-800/80">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(16,185,129,0.15),rgba(255,255,255,0))]"></div>

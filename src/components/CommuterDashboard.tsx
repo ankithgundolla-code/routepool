@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Bike,
   Plus,
@@ -17,7 +17,9 @@ import {
   RefreshCw,
   ArrowRight,
   ArrowLeftRight,
-  Sparkles
+  Sparkles,
+  Bell,
+  Radio
 } from 'lucide-react';
 import { CommuterRoute, Match, CommuterAnalytics } from '../types';
 import { api } from '../services/api';
@@ -76,6 +78,17 @@ export const CommuterDashboard: React.FC = () => {
   const [showCreateRouteModal, setShowCreateRouteModal] = useState(false);
   const [selectedOpp, setSelectedOpp] = useState<Match | null>(null);
   const [feedback, setFeedback] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
+  const [highlightedOppIds, setHighlightedOppIds] = useState<Set<number>>(new Set());
+  const [newOppNotice, setNewOppNotice] = useState<{ count: number } | null>(null);
+
+  const isMountedRef = useRef<boolean>(true);
+  const isPollingBusyRef = useRef<boolean>(false);
+  const knownOppIdsRef = useRef<Set<number>>(new Set());
+  const isInitialLoadRef = useRef<boolean>(true);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const highlightTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const notifTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [showGuide, setShowGuide] = useState(() => {
     try {
       return localStorage.getItem('routepool_guide_commuter_dismissed') !== 'true';
@@ -94,18 +107,86 @@ export const CommuterDashboard: React.FC = () => {
     dest_lng: 78.4482,
     departure_time: '08:30',
     arrival_time: '09:15',
-    available_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'],
+    available_days: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
     max_package_weight: 4.0,
     max_package_size: 'medium' as 'small' | 'medium' | 'large',
     max_detour: 1.5,
     travel_mode: 'two_wheeler' as 'two_wheeler' | 'car' | 'metro_walking' | 'bicycle',
   });
 
-  useEffect(() => {
-    loadData();
+  // Core polling function every 5 seconds
+  const pollOpportunities = useCallback(async () => {
+    if (!isMountedRef.current || document.hidden || isPollingBusyRef.current) {
+      return;
+    }
+    isPollingBusyRef.current = true;
+    try {
+      const [res, stats] = await Promise.all([
+        api.getCommuterOpportunities(),
+        api.getCommuterAnalytics().catch(() => null),
+      ]);
+      if (!isMountedRef.current) return;
+      if (stats) setAnalytics(stats);
+
+      const freshList: Match[] = res?.opportunities || [];
+
+      if (isInitialLoadRef.current) {
+        // First load: record existing opportunity IDs without triggering any notifications
+        knownOppIdsRef.current = new Set(freshList.map(o => o.id));
+        isInitialLoadRef.current = false;
+        setOpportunities(freshList);
+        setSelectedOpp(prev => prev && freshList.some(o => o.id === prev.id) ? prev : (freshList.length > 0 ? freshList[0] : null));
+      } else {
+        // Compare newly fetched opportunity IDs with previously known opportunity IDs
+        const incomingIds = freshList.map(o => o.id);
+        const newIds = incomingIds.filter(id => !knownOppIdsRef.current.has(id));
+
+        // Always update opportunities list state so UI stays in sync without page reload
+        setOpportunities(freshList);
+
+        if (newIds.length > 0) {
+          // Record new IDs so we do not repeatedly notify about the same opportunity
+          newIds.forEach(id => knownOppIdsRef.current.add(id));
+
+          // Small notification: "New delivery opportunity available!" + count
+          setNewOppNotice({ count: newIds.length });
+          if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+          notifTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current) setNewOppNotice(null);
+          }, 7000);
+
+          // Highlight newly arrived opportunity cards temporarily
+          setHighlightedOppIds(new Set(newIds));
+          if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+          highlightTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current) setHighlightedOppIds(new Set());
+          }, 8000);
+
+          // Auto-focus first new opportunity if nothing was selected or previous is gone
+          setSelectedOpp(prev => {
+            if (prev && freshList.some(o => o.id === prev.id)) return prev;
+            const topNew = freshList.find(o => newIds.includes(o.id));
+            return topNew || (freshList.length > 0 ? freshList[0] : null);
+          });
+        } else {
+          // If previous selection was accepted or removed, keep selection aligned
+          setSelectedOpp(prev => prev && freshList.some(o => o.id === prev.id) ? prev : (freshList.length > 0 ? freshList[0] : null));
+        }
+      }
+    } catch (err) {
+      // Gracefully handle network errors without clearing previously loaded opportunities
+      console.warn('Commuter opportunity polling check error:', err);
+    } finally {
+      isPollingBusyRef.current = false;
+      // Schedule next poll in 5 seconds if mounted and tab is visible
+      if (isMountedRef.current && !document.hidden) {
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = setTimeout(pollOpportunities, 5000);
+      }
+    }
   }, []);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const [rts, opps, stats] = await Promise.all([
@@ -114,18 +195,62 @@ export const CommuterDashboard: React.FC = () => {
         api.getCommuterAnalytics().catch(() => null),
       ]);
       setRoutes(rts);
-      setOpportunities(opps.opportunities);
+      const oppList = opps?.opportunities || [];
+      setOpportunities(oppList);
+
+      // Track known IDs so manual refresh doesn't trigger new opportunity alerts
+      oppList.forEach(o => knownOppIdsRef.current.add(o.id));
+      isInitialLoadRef.current = false;
+
       if (stats) setAnalytics(stats);
-      if (opps.opportunities.length > 0 && !selectedOpp) {
-        setSelectedOpp(opps.opportunities[0]);
-      }
+      setSelectedOpp(prev => (prev && oppList.some(o => o.id === prev.id) ? prev : (oppList.length > 0 ? oppList[0] : null)));
     } catch (e: any) {
       console.error(e);
       setFeedback({ text: e.message || 'Failed to load commuter data', type: 'error' });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    // 1. Fetch commuter opportunities immediately when the dashboard loads
+    loadData().then(() => {
+      // Start 5-second polling cycle
+      if (isMountedRef.current && !document.hidden) {
+        if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = setTimeout(pollOpportunities, 5000);
+      }
+    });
+
+    // 7. Pause polling when the browser tab is hidden and resume when it becomes visible
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      } else {
+        if (pollTimerRef.current) {
+          clearTimeout(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+        pollOpportunities();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    // 6 & 10. Stop polling when commuter logs out or unmounts, clean up timers and listeners
+    return () => {
+      isMountedRef.current = false;
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
+      if (highlightTimerRef.current) clearTimeout(highlightTimerRef.current);
+      if (notifTimerRef.current) clearTimeout(notifTimerRef.current);
+    };
+  }, [loadData, pollOpportunities]);
 
   const handleToggleRoute = async (id: number) => {
     try {
@@ -187,7 +312,7 @@ export const CommuterDashboard: React.FC = () => {
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 w-full">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -289,10 +414,48 @@ export const CommuterDashboard: React.FC = () => {
                 <span className="text-[10px] font-bold text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-800/40">
                   {opportunities.length} Available
                 </span>
+                <span className="inline-flex items-center gap-1.5 text-[10px] text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-800/40" title="Automatic real-time polling every 5 seconds">
+                  <span className="relative flex h-1.5 w-1.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-400"></span>
+                  </span>
+                  <span>Live (5s)</span>
+                </span>
               </h2>
               <p className="text-[11px] text-slate-400">Packages awaiting pickup along your registered path</p>
             </div>
           </div>
+
+          {/* Real-time Opportunity Notification */}
+          {newOppNotice && (
+            <div
+              role="status"
+              aria-live="polite"
+              className="p-3.5 rounded-xl bg-cyan-950/80 border border-cyan-500/60 shadow-lg shadow-cyan-950/50 text-cyan-100 text-xs flex items-center justify-between transition-all duration-300"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="relative flex h-2.5 w-2.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-400"></span>
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white text-sm">
+                    {newOppNotice.count === 1 ? 'New delivery opportunity available!' : `${newOppNotice.count} new delivery opportunities available!`}
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-950 bg-cyan-400 px-2 py-0.5 rounded-full shadow-sm">
+                    +{newOppNotice.count} New
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={() => setNewOppNotice(null)}
+                className="p-1 rounded-lg text-cyan-400 hover:text-white hover:bg-cyan-900/40 transition-colors cursor-pointer"
+                title="Dismiss notification"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
 
           {loading ? (
             <div className="p-8 text-center text-xs text-slate-500 bg-slate-900/30 rounded-xl border border-slate-800">
@@ -306,12 +469,15 @@ export const CommuterDashboard: React.FC = () => {
             <div className="space-y-3">
               {opportunities.map(opp => {
                 const isSelected = selectedOpp?.id === opp.id;
+                const isHighlighted = highlightedOppIds.has(opp.id);
                 return (
                   <div
                     key={opp.id}
                     onClick={() => setSelectedOpp(opp)}
-                    className={`p-4 rounded-xl border transition-all cursor-pointer ${
-                      isSelected
+                    className={`p-4 rounded-xl border transition-all duration-300 cursor-pointer ${
+                      isHighlighted
+                        ? 'bg-cyan-950/40 border-cyan-400 ring-2 ring-cyan-400/50 shadow-lg shadow-cyan-950/60'
+                        : isSelected
                         ? 'bg-slate-900 border-cyan-500/80 shadow-lg shadow-cyan-950/30'
                         : 'bg-slate-900/40 border-slate-800 hover:border-slate-700'
                     }`}
@@ -321,6 +487,11 @@ export const CommuterDashboard: React.FC = () => {
                         <div className="font-bold text-white text-sm flex items-center gap-2">
                           <PackageIcon className="w-4 h-4 text-cyan-400" />
                           <span>{opp.package_detail?.package_name || 'Delivery Parcel'}</span>
+                          {isHighlighted && (
+                            <span className="px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-wide bg-cyan-400 text-slate-950 rounded-full animate-pulse shadow-sm">
+                              New Opportunity
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-slate-400 mt-1">
                           Vendor: <strong className="text-slate-200">{opp.vendor_business_name}</strong>
@@ -442,23 +613,29 @@ export const CommuterDashboard: React.FC = () => {
 
             {selectedOpp ? (
               <div className="space-y-4">
-                <RouteMap
-                  startLat={selectedOpp.route_detail?.start_lat}
-                  startLng={selectedOpp.route_detail?.start_lng}
-                  startLabel={selectedOpp.route_detail?.start_location}
-                  destLat={selectedOpp.route_detail?.dest_lat}
-                  destLng={selectedOpp.route_detail?.dest_lng}
-                  destLabel={selectedOpp.route_detail?.destination}
-                  waypoints={selectedOpp.route_detail?.intermediate_points || []}
-                  pickupLat={selectedOpp.package_detail?.pickup_lat}
-                  pickupLng={selectedOpp.package_detail?.pickup_lng}
-                  pickupLabel={selectedOpp.package_detail?.pickup_location}
-                  dropLat={selectedOpp.package_detail?.dest_lat}
-                  dropLng={selectedOpp.package_detail?.dest_lng}
-                  dropLabel={selectedOpp.package_detail?.destination}
-                  detourKm={selectedOpp.estimated_detour}
-                  className="h-64 w-full rounded-xl overflow-hidden border border-slate-800"
-                />
+                {!showCreateRouteModal ? (
+                  <RouteMap
+                    startLat={selectedOpp.route_detail?.start_lat}
+                    startLng={selectedOpp.route_detail?.start_lng}
+                    startLabel={selectedOpp.route_detail?.start_location}
+                    destLat={selectedOpp.route_detail?.dest_lat}
+                    destLng={selectedOpp.route_detail?.dest_lng}
+                    destLabel={selectedOpp.route_detail?.destination}
+                    waypoints={selectedOpp.route_detail?.intermediate_points || []}
+                    pickupLat={selectedOpp.package_detail?.pickup_lat}
+                    pickupLng={selectedOpp.package_detail?.pickup_lng}
+                    pickupLabel={selectedOpp.package_detail?.pickup_location}
+                    dropLat={selectedOpp.package_detail?.dest_lat}
+                    dropLng={selectedOpp.package_detail?.dest_lng}
+                    dropLabel={selectedOpp.package_detail?.destination}
+                    detourKm={selectedOpp.estimated_detour}
+                    className="h-64 w-full rounded-xl overflow-hidden border border-slate-800"
+                  />
+                ) : (
+                  <div className="h-64 w-full rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center text-xs text-slate-500">
+                    <span>Map paused while route registration is active</span>
+                  </div>
+                )}
 
                 <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2">
                   <div className="flex justify-between">
