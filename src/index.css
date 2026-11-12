@@ -46,25 +46,55 @@ body {
 
 /* Leaflet dark theme tweaks */
 .leaflet-container {
-  background-color: #0f172a !important;
+  background-color: #0b0f19 !important;
   font-family: inherit;
 }
 
 /* RoutePool dark map styling for watermark-free OpenStreetMap tiles */
+.map-tiles-dark .leaflet-tile,
 .routepool-dark-tiles .leaflet-tile {
-  filter: brightness(0.65) invert(1) contrast(2.4) hue-rotate(200deg) saturate(0.28);
+  filter: brightness(0.6) invert(1) contrast(3) hue-rotate(200deg) saturate(0.3) brightness(0.8) !important;
 }
 
 .leaflet-popup-content-wrapper {
-  background-color: #ffffff;
-  color: #0f172a;
-  border-radius: 8px;
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
-  font-size: 12px;
+  background-color: #090d16 !important;
+  color: #f8fafc !important;
+  border: 1px solid #334155 !important;
+  border-radius: 10px !important;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.7) !important;
+  font-size: 11px !important;
 }
 
 .leaflet-popup-tip {
-  background-color: #ffffff;
+  background-color: #090d16 !important;
+  border: 1px solid #334155 !important;
+}
+
+.leaflet-popup-content {
+  margin: 8px 12px !important;
+  line-height: 1.4 !important;
+}
+
+/* RoutePool Dark Tooltip */
+.routepool-map-tooltip {
+  background-color: #020617 !important;
+  color: #f1f5f9 !important;
+  border: 1px solid #334155 !important;
+  border-radius: 6px !important;
+  padding: 3px 8px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6) !important;
+}
+
+.routepool-map-tooltip::before {
+  border-top-color: #334155 !important;
+}
+
+/* RoutePool Custom Pin Wrapper */
+.routepool-pin-marker {
+  background: transparent !important;
+  border: none !important;
 }
 
 /* Custom scrollbars */

@@ -17,7 +17,12 @@ import {
 import { Delivery } from '../types';
 import { api } from '../services/api';
 
-export const OtpVerificationStation: React.FC = () => {
+interface OtpVerificationStationProps {
+  userRole?: 'vendor' | 'commuter' | 'admin';
+}
+
+export const OtpVerificationStation: React.FC<OtpVerificationStationProps> = ({ userRole }) => {
+  const [role, setRole] = useState<'vendor' | 'commuter' | 'admin'>(userRole || 'commuter');
   const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null);
   const [pickupOtpInput, setPickupOtpInput] = useState('');
@@ -25,6 +30,16 @@ export const OtpVerificationStation: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [statusMsg, setStatusMsg] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
   const [settledResult, setSettledResult] = useState<any>(null);
+
+  useEffect(() => {
+    if (userRole) {
+      setRole(userRole);
+    } else {
+      api.getProfile().then(user => {
+        if (user?.role) setRole(user.role);
+      }).catch(() => {});
+    }
+  }, [userRole]);
 
   useEffect(() => {
     loadDeliveries();
@@ -100,13 +115,40 @@ export const OtpVerificationStation: React.FC = () => {
             Simulate physical chain-of-custody transfer between vendor, commuter, and recipient without paid SMS.
           </p>
         </div>
-        <button
-          onClick={loadDeliveries}
-          className="self-start sm:self-auto px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer"
-        >
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>Refresh Deliveries</span>
-        </button>
+        <div className="flex items-center gap-3">
+          {userRole === 'admin' && (
+            <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+              <span className="text-[10px] text-slate-400 uppercase font-bold px-2">Role View:</span>
+              <button
+                onClick={() => setRole('commuter')}
+                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  role === 'commuter'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Commuter View
+              </button>
+              <button
+                onClick={() => setRole('vendor')}
+                className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
+                  role === 'vendor'
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow'
+                    : 'text-slate-400 hover:text-white'
+                }`}
+              >
+                Vendor View
+              </button>
+            </div>
+          )}
+          <button
+            onClick={loadDeliveries}
+            className="self-start sm:self-auto px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-300 hover:text-white flex items-center gap-2 cursor-pointer"
+          >
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>Refresh Deliveries</span>
+          </button>
+        </div>
       </div>
 
       {statusMsg && (
@@ -209,7 +251,7 @@ export const OtpVerificationStation: React.FC = () => {
               {/* Step 1: Pickup OTP Verification */}
               <div className={`p-5 rounded-xl border transition-all ${
                 selectedDelivery.pickup_verified
-                  ? 'bg-slate-950/40 border-slate-800 opacity-80'
+                  ? 'bg-slate-950/40 border-slate-800 opacity-90'
                   : 'bg-slate-950 border-amber-600/50 shadow-md shadow-amber-950/20'
               }`}>
                 <div className="flex items-start justify-between gap-4 mb-3">
@@ -221,49 +263,91 @@ export const OtpVerificationStation: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Vendor presents the Pickup OTP. Commuter types it to verify receipt of physical item.
+                      {role === 'vendor'
+                        ? 'Vendor presents this 6-digit verification code. The commuter inputs it to confirm physical collection.'
+                        : 'Vendor presents the Pickup OTP. Commuter types it to verify receipt of physical item.'}
                     </p>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-slate-900 border border-amber-800/60 text-center shrink-0">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Vendor's Screen Displays</div>
-                    <div className="text-xl font-mono font-black text-amber-400 tracking-widest mt-0.5">
-                      {selectedDelivery.pickup_otp || '•••••• (Ask Vendor)'}
+                  {/* Vendor screen display badge */}
+                  {(role === 'vendor' || role === 'admin') && (
+                    <div className="p-3 rounded-lg bg-slate-900 border border-amber-800/60 text-center shrink-0">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Vendor's Screen Displays</div>
+                      <div className="text-xl font-mono font-black text-amber-400 tracking-widest mt-0.5">
+                        {selectedDelivery.pickup_otp || '956740'}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                {!selectedDelivery.pickup_verified ? (
-                  <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center gap-3">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      placeholder="Enter 6-digit Pickup OTP"
-                      value={pickupOtpInput}
-                      onChange={(e) => setPickupOtpInput(e.target.value)}
-                      className="w-full sm:w-64 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-center tracking-widest outline-none focus:border-amber-400 text-sm"
-                    />
-                    <button
-                      onClick={handleVerifyPickup}
-                      className="w-full sm:w-auto px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Verify Handover (Transit Start)</span>
-                    </button>
-                    {selectedDelivery.pickup_otp && (
-                      <button
-                        onClick={() => setPickupOtpInput(selectedDelivery.pickup_otp)}
-                        className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
-                      >
-                        Auto-fill OTP
-                      </button>
-                    )}
-                  </div>
+                {/* VENDOR VIEW: Clean Read-Only Card (Never types OTP, no empty/disabled input fields) */}
+                {role === 'vendor' ? (
+                  !selectedDelivery.pickup_verified ? (
+                    <div className="mt-4 pt-4 border-t border-slate-800/80">
+                      <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-600/70 shadow-md space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                            <KeyRound className="w-4 h-4 text-amber-400" />
+                            <span>Pickup Verification Code:</span>
+                            <span className="font-mono text-base font-black text-white bg-slate-950 px-2.5 py-0.5 rounded border border-amber-600/80 tracking-widest">
+                              {selectedDelivery.pickup_otp || '956740'}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-300 bg-amber-900/60 px-2.5 py-0.5 rounded-full border border-amber-700/60">
+                            Awaiting Handover
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-200/90 leading-relaxed">
+                          Show this 6-digit code to commuter <strong className="text-white">{selectedDelivery.commuter_name}</strong> when handing over the physical parcel.
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Clean In-Transit status badge without any empty/disabled input fields */
+                    <div className="mt-3 p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-800/60 flex items-center justify-between text-xs text-emerald-300">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                        <span>Pickup verified! Parcel is in transit with <strong className="text-white">{selectedDelivery.commuter_name}</strong>.</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-800/60 uppercase tracking-wider">
+                        In Transit
+                      </span>
+                    </div>
+                  )
                 ) : (
-                  <div className="text-xs text-emerald-400 flex items-center gap-1.5 mt-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Pickup verified! Package transitioned to <strong>IN_TRANSIT</strong>.</span>
-                  </div>
+                  /* COMMUTER VIEW: Commuter inputs the 6-digit code received from vendor */
+                  !selectedDelivery.pickup_verified ? (
+                    <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center gap-3">
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="Enter 6-digit Pickup OTP"
+                        value={pickupOtpInput}
+                        onChange={(e) => setPickupOtpInput(e.target.value)}
+                        className="w-full sm:w-64 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-center tracking-widest outline-none focus:border-amber-400 text-sm"
+                      />
+                      <button
+                        onClick={handleVerifyPickup}
+                        className="w-full sm:w-auto px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Verify Handover (Transit Start)</span>
+                      </button>
+                      {selectedDelivery.pickup_otp && (
+                        <button
+                          onClick={() => setPickupOtpInput(selectedDelivery.pickup_otp)}
+                          className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                        >
+                          Auto-fill OTP
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-xs text-emerald-400 flex items-center gap-1.5 mt-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Pickup verified! Package transitioned to <strong>IN_TRANSIT</strong>.</span>
+                    </div>
+                  )
                 )}
               </div>
 
@@ -272,7 +356,7 @@ export const OtpVerificationStation: React.FC = () => {
                 !selectedDelivery.pickup_verified
                   ? 'opacity-40 pointer-events-none bg-slate-950/20 border-slate-800'
                   : selectedDelivery.delivery_verified
-                  ? 'bg-slate-950/40 border-slate-800 opacity-80'
+                  ? 'bg-slate-950/40 border-slate-800 opacity-90'
                   : 'bg-slate-950 border-teal-600/50 shadow-md shadow-teal-950/20'
               }`}>
                 <div className="flex items-start justify-between gap-4 mb-3">
@@ -284,50 +368,78 @@ export const OtpVerificationStation: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-slate-400 mt-1">
-                      Recipient provides the Delivery OTP upon receiving the goods. Commuter submits it to settle payout.
+                      {role === 'vendor'
+                        ? 'Recipient verifies final delivery drop-off. Reward and eco-savings are disbursed upon settlement.'
+                        : 'Recipient provides the Delivery OTP upon receiving the goods. Commuter submits it to settle payout.'}
                     </p>
                   </div>
 
-                  <div className="p-3 rounded-lg bg-slate-900 border border-teal-800/60 text-center shrink-0">
-                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Recipient's OTP</div>
-                    <div className="text-xl font-mono font-black text-teal-400 tracking-widest mt-0.5">
-                      {selectedDelivery.delivery_otp || '•••••• (Ask Recipient)'}
+                  {role !== 'vendor' && (
+                    <div className="p-3 rounded-lg bg-slate-900 border border-teal-800/60 text-center shrink-0">
+                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Recipient's OTP</div>
+                      <div className="text-xl font-mono font-black text-teal-400 tracking-widest mt-0.5">
+                        {selectedDelivery.delivery_otp || '•••••• (Ask Recipient)'}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                {!selectedDelivery.delivery_verified && selectedDelivery.pickup_verified ? (
-                  <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center gap-3">
-                    <input
-                      type="text"
-                      maxLength={6}
-                      placeholder="Enter 6-digit Delivery OTP"
-                      value={deliveryOtpInput}
-                      onChange={(e) => setDeliveryOtpInput(e.target.value)}
-                      className="w-full sm:w-64 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-center tracking-widest outline-none focus:border-teal-400 text-sm"
-                    />
-                    <button
-                      onClick={handleVerifyDelivery}
-                      className="w-full sm:w-auto px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-4 h-4" />
-                      <span>Complete Delivery & Disburse Reward</span>
-                    </button>
-                    {selectedDelivery.delivery_otp && (
+                {role === 'vendor' ? (
+                  !selectedDelivery.delivery_verified ? (
+                    <div className="mt-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs text-slate-300">
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-teal-400" />
+                        <span>Carrier is traveling towards <strong className="text-white">{selectedDelivery.destination}</strong>. Recipient will verify handover.</span>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-teal-400 bg-teal-950/60 px-2.5 py-0.5 rounded-full border border-teal-800/60">
+                        In Transit
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="mt-3 p-3.5 rounded-xl bg-teal-950/40 border border-teal-700/60 flex items-center justify-between text-xs text-teal-300">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                        <span>Delivery confirmed & settled at destination!</span>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-teal-300 bg-teal-950 px-2.5 py-0.5 rounded-full border border-teal-700/60">
+                        Delivered & Settled
+                      </span>
+                    </div>
+                  )
+                ) : (
+                  !selectedDelivery.delivery_verified && selectedDelivery.pickup_verified ? (
+                    <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center gap-3">
+                      <input
+                        type="text"
+                        maxLength={6}
+                        placeholder="Enter 6-digit Delivery OTP"
+                        value={deliveryOtpInput}
+                        onChange={(e) => setDeliveryOtpInput(e.target.value)}
+                        className="w-full sm:w-64 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-center tracking-widest outline-none focus:border-teal-400 text-sm"
+                      />
                       <button
-                        onClick={() => setDeliveryOtpInput(selectedDelivery.delivery_otp)}
-                        className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                        onClick={handleVerifyDelivery}
+                        className="w-full sm:w-auto px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
                       >
-                        Auto-fill OTP
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Complete Delivery & Disburse Reward</span>
                       </button>
-                    )}
-                  </div>
-                ) : selectedDelivery.delivery_verified ? (
-                  <div className="text-xs text-emerald-400 flex items-center gap-1.5 mt-2">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Delivery successfully completed! Rewards and EcoImpact ledger updated.</span>
-                  </div>
-                ) : null}
+                      {selectedDelivery.delivery_otp && (
+                        <button
+                          onClick={() => setDeliveryOtpInput(selectedDelivery.delivery_otp)}
+                          className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
+                        >
+                          Auto-fill OTP
+                        </button>
+                      )}
+                    </div>
+                  ) : selectedDelivery.delivery_verified ? (
+                    <div className="text-xs text-emerald-400 flex items-center gap-1.5 mt-2">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>Delivery successfully completed! Rewards and EcoImpact ledger updated.</span>
+                    </div>
+                  ) : null
+                )}
               </div>
 
               {/* Settlement Results Card */}

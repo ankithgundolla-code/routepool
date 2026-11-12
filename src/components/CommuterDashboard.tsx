@@ -21,7 +21,7 @@ import {
   Bell,
   Radio
 } from 'lucide-react';
-import { CommuterRoute, Match, CommuterAnalytics } from '../types';
+import { CommuterRoute, Match, CommuterAnalytics, Delivery } from '../types';
 import { api } from '../services/api';
 import { RouteMap } from './RouteMap';
 import { RoleGuidePanel } from './RoleGuidePanel';
@@ -73,6 +73,7 @@ const HYDERABAD_ROUTES_PRESET = [
 export const CommuterDashboard: React.FC = () => {
   const [routes, setRoutes] = useState<CommuterRoute[]>([]);
   const [opportunities, setOpportunities] = useState<Match[]>([]);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [analytics, setAnalytics] = useState<CommuterAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [showCreateRouteModal, setShowCreateRouteModal] = useState(false);
@@ -121,12 +122,14 @@ export const CommuterDashboard: React.FC = () => {
     }
     isPollingBusyRef.current = true;
     try {
-      const [res, stats] = await Promise.all([
+      const [res, stats, dels] = await Promise.all([
         api.getCommuterOpportunities(),
         api.getCommuterAnalytics().catch(() => null),
+        api.getDeliveries().catch(() => []),
       ]);
       if (!isMountedRef.current) return;
       if (stats) setAnalytics(stats);
+      if (dels && Array.isArray(dels)) setDeliveries(dels);
 
       const freshList: Match[] = res?.opportunities || [];
 
@@ -189,14 +192,16 @@ export const CommuterDashboard: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [rts, opps, stats] = await Promise.all([
+      const [rts, opps, stats, dels] = await Promise.all([
         api.getCommuterRoutes(),
         api.getCommuterOpportunities(),
         api.getCommuterAnalytics().catch(() => null),
+        api.getDeliveries().catch(() => []),
       ]);
       setRoutes(rts);
       const oppList = opps?.opportunities || [];
       setOpportunities(oppList);
+      if (dels && Array.isArray(dels)) setDeliveries(dels);
 
       // Track known IDs so manual refresh doesn't trigger new opportunity alerts
       oppList.forEach(o => knownOppIdsRef.current.add(o.id));
@@ -609,68 +614,107 @@ export const CommuterDashboard: React.FC = () => {
         {/* Right Column: Detour Inspection Map */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-4">
-            <h3 className="text-sm font-bold text-white">Route & Detour Inspection</h3>
+            {(() => {
+              const activeRoute = routes.find(r => r.is_active) || (routes.length > 0 ? routes[0] : null);
 
-            {selectedOpp ? (
-              <div className="space-y-4">
-                {!showCreateRouteModal ? (
-                  <RouteMap
-                    startLat={selectedOpp.route_detail?.start_lat}
-                    startLng={selectedOpp.route_detail?.start_lng}
-                    startLabel={selectedOpp.route_detail?.start_location}
-                    destLat={selectedOpp.route_detail?.dest_lat}
-                    destLng={selectedOpp.route_detail?.dest_lng}
-                    destLabel={selectedOpp.route_detail?.destination}
-                    waypoints={selectedOpp.route_detail?.intermediate_points || []}
-                    pickupLat={selectedOpp.package_detail?.pickup_lat}
-                    pickupLng={selectedOpp.package_detail?.pickup_lng}
-                    pickupLabel={selectedOpp.package_detail?.pickup_location}
-                    dropLat={selectedOpp.package_detail?.dest_lat}
-                    dropLng={selectedOpp.package_detail?.dest_lng}
-                    dropLabel={selectedOpp.package_detail?.destination}
-                    detourKm={selectedOpp.estimated_detour}
-                    className="h-64 w-full rounded-xl overflow-hidden border border-slate-800"
-                  />
-                ) : (
-                  <div className="h-64 w-full rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center text-xs text-slate-500">
-                    <span>Map paused while route registration is active</span>
+              return (
+                <>
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-white">Route & Detour Inspection</h3>
+                    {selectedOpp ? (
+                      <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/40 px-2 py-0.5 rounded-full">
+                        Detour: +{selectedOpp.estimated_detour} km
+                      </span>
+                    ) : activeRoute ? (
+                      <span className="text-[10px] font-semibold text-cyan-400 bg-cyan-950/60 border border-cyan-800/40 px-2 py-0.5 rounded-full">
+                        Registered Corridor
+                      </span>
+                    ) : null}
                   </div>
-                )}
 
-                <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2">
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Normal Travel Distance:</span>
-                    <span className="text-slate-200 font-semibold">{selectedOpp.normal_distance} km</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">Total with Package Detour:</span>
-                    <span className="text-slate-200 font-semibold">{selectedOpp.delivery_distance} km</span>
-                  </div>
-                  <div className="flex justify-between pt-1.5 border-t border-slate-800/80">
-                    <span className="text-slate-300 font-medium">Marginal Additional Travel:</span>
-                    <span className="text-emerald-400 font-bold">+{selectedOpp.estimated_detour} km</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-slate-300 font-medium">Net Commuter Reward:</span>
-                    <span className="text-white font-bold">₹{selectedOpp.commuter_earnings}</span>
-                  </div>
-                </div>
+                  {!showCreateRouteModal ? (
+                    <RouteMap
+                      startLat={selectedOpp?.route_detail?.start_lat || activeRoute?.start_lat || 17.4116}
+                      startLng={selectedOpp?.route_detail?.start_lng || activeRoute?.start_lng || 78.4611}
+                      startLabel={selectedOpp?.route_detail?.start_location || activeRoute?.start_location || 'Khairatabad'}
+                      destLat={selectedOpp?.route_detail?.dest_lat || activeRoute?.dest_lat || 17.4375}
+                      destLng={selectedOpp?.route_detail?.dest_lng || activeRoute?.dest_lng || 78.4482}
+                      destLabel={selectedOpp?.route_detail?.destination || activeRoute?.destination || 'Ameerpet'}
+                      waypoints={selectedOpp?.route_detail?.intermediate_points || activeRoute?.intermediate_points || []}
+                      pickupLat={selectedOpp?.package_detail?.pickup_lat}
+                      pickupLng={selectedOpp?.package_detail?.pickup_lng}
+                      pickupLabel={selectedOpp?.package_detail?.pickup_location}
+                      dropLat={selectedOpp?.package_detail?.dest_lat}
+                      dropLng={selectedOpp?.package_detail?.dest_lng}
+                      dropLabel={selectedOpp?.package_detail?.destination}
+                      detourKm={selectedOpp?.estimated_detour}
+                      className="h-64 w-full rounded-xl overflow-hidden border border-slate-800"
+                    />
+                  ) : (
+                    <div className="h-64 w-full rounded-xl border border-slate-800 bg-slate-950/40 flex items-center justify-center text-xs text-slate-500">
+                      <span>Map paused while route registration is active</span>
+                    </div>
+                  )}
 
-                {selectedOpp.status === 'PROPOSED' && (
-                  <button
-                    onClick={() => handleAcceptMatch(selectedOpp.id)}
-                    className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
-                  >
-                    <span>Accept Delivery Request</span>
-                    <ArrowRight className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="p-8 text-center text-xs text-slate-500">
-                Select an opportunity to visually inspect detour points on the map
-              </div>
-            )}
+                  {selectedOpp ? (
+                    <div className="space-y-3">
+                      <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2">
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Normal Travel Distance:</span>
+                          <span className="text-slate-200 font-semibold">{selectedOpp.normal_distance} km</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Total with Package Detour:</span>
+                          <span className="text-slate-200 font-semibold">{selectedOpp.delivery_distance} km</span>
+                        </div>
+                        <div className="flex justify-between pt-1.5 border-t border-slate-800/80">
+                          <span className="text-slate-300 font-medium">Marginal Additional Travel:</span>
+                          <span className="text-emerald-400 font-bold">+{selectedOpp.estimated_detour} km</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-slate-300 font-medium">Net Commuter Reward:</span>
+                          <span className="text-white font-bold">₹{selectedOpp.commuter_earnings}</span>
+                        </div>
+                      </div>
+
+                      {selectedOpp.status === 'PROPOSED' && (
+                        <button
+                          onClick={() => handleAcceptMatch(selectedOpp.id)}
+                          className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md cursor-pointer"
+                        >
+                          <span>Accept Delivery Request</span>
+                          <ArrowRight className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-400 font-medium">Active Routine Corridor:</span>
+                        <span className="text-cyan-400 font-bold truncate max-w-[200px] text-right">
+                          {activeRoute?.route_name || 'Daily Transit Corridor'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Schedule:</span>
+                        <span className="text-slate-200">
+                          {activeRoute ? `${activeRoute.departure_time} ➔ ${activeRoute.arrival_time}` : '08:30 ➔ 09:15'}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-[11px] text-slate-400">
+                        <span>Max Detour Threshold:</span>
+                        <span className="text-slate-200">
+                          {activeRoute ? `+${activeRoute.max_detour} km` : '+1.5 km'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 pt-1.5 border-t border-slate-800/80 leading-relaxed">
+                        Your registered commuter corridor is active on the map above. When vendors create deliveries near your path, select any opportunity on the left to inspect detour waypoints.
+                      </p>
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
       </div>

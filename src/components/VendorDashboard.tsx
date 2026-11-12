@@ -18,9 +18,10 @@ import {
   RefreshCw,
   Eye,
   ArrowLeftRight,
-  Sparkles
+  Sparkles,
+  KeyRound
 } from 'lucide-react';
-import { Package, Match, VendorAnalytics } from '../types';
+import { Package, Match, VendorAnalytics, Delivery } from '../types';
 import { api } from '../services/api';
 import { RouteMap } from './RouteMap';
 import { RoleGuidePanel } from './RoleGuidePanel';
@@ -54,6 +55,7 @@ export const VendorDashboard: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   const [packageMatches, setPackageMatches] = useState<Match[]>([]);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
   const [matchesLoading, setMatchesLoading] = useState(false);
   const [selectedMatchForMap, setSelectedMatchForMap] = useState<Match | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
@@ -133,12 +135,14 @@ export const VendorDashboard: React.FC = () => {
     }
     isPollingBusyRef.current = true;
     try {
-      const [freshPkgs, freshStats] = await Promise.all([
+      const [freshPkgs, freshStats, freshDels] = await Promise.all([
         api.getPackages(),
         api.getVendorAnalytics().catch(() => null),
+        api.getDeliveries().catch(() => []),
       ]);
 
       if (!isMountedRef.current) return;
+      if (freshDels && Array.isArray(freshDels)) setDeliveries(freshDels);
 
       if (freshPkgs && Array.isArray(freshPkgs)) {
         if (isInitialLoadRef.current) {
@@ -241,12 +245,14 @@ export const VendorDashboard: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const [pkgs, stats] = await Promise.all([
+      const [pkgs, stats, dels] = await Promise.all([
         api.getPackages(),
         api.getVendorAnalytics().catch(() => null),
+        api.getDeliveries().catch(() => []),
       ]);
       setPackages(pkgs);
       if (stats) setAnalytics(stats);
+      if (dels && Array.isArray(dels)) setDeliveries(dels);
       pkgs.forEach(p => knownPackageStatusesRef.current.set(p.id, p.status));
       isInitialLoadRef.current = false;
 
@@ -659,12 +665,12 @@ export const VendorDashboard: React.FC = () => {
                 </div>
                 {!showCreateModal ? (
                   <RouteMap
-                    startLat={selectedMatchForMap?.route_detail?.start_lat || selectedPackage.pickup_lat}
-                    startLng={selectedMatchForMap?.route_detail?.start_lng || selectedPackage.pickup_lng}
-                    startLabel={selectedMatchForMap?.route_detail?.start_location || selectedPackage.pickup_location}
-                    destLat={selectedMatchForMap?.route_detail?.dest_lat || selectedPackage.dest_lat}
-                    destLng={selectedMatchForMap?.route_detail?.dest_lng || selectedPackage.dest_lng}
-                    destLabel={selectedMatchForMap?.route_detail?.destination || selectedPackage.destination}
+                    startLat={selectedMatchForMap?.route_detail?.start_lat}
+                    startLng={selectedMatchForMap?.route_detail?.start_lng}
+                    startLabel={selectedMatchForMap?.route_detail?.start_location}
+                    destLat={selectedMatchForMap?.route_detail?.dest_lat}
+                    destLng={selectedMatchForMap?.route_detail?.dest_lng}
+                    destLabel={selectedMatchForMap?.route_detail?.destination}
                     waypoints={selectedMatchForMap?.route_detail?.intermediate_points || []}
                     pickupLat={selectedPackage.pickup_lat}
                     pickupLng={selectedPackage.pickup_lng}
@@ -682,32 +688,95 @@ export const VendorDashboard: React.FC = () => {
                 )}
               </div>
 
-              {/* Carrier Handover Banner if Commuter Accepted */}
-              {packageMatches.some(m => m.status === 'ACCEPTED') && (() => {
+              {/* Carrier Handover & Read-only OTP Card */}
+              {(() => {
                 const acceptedMatch = packageMatches.find(m => m.status === 'ACCEPTED');
-                if (!acceptedMatch) return null;
+                const relatedDelivery = deliveries.find(d =>
+                  d.package_id === selectedPackage.id ||
+                  d.match_detail?.package === selectedPackage.id ||
+                  (acceptedMatch && d.match === acceptedMatch.id)
+                );
+
+                if (!acceptedMatch && !relatedDelivery) return null;
+
+                const commuterName = acceptedMatch?.commuter_name || relatedDelivery?.commuter_name || 'Carrier';
+                const pickupOtp = relatedDelivery?.pickup_otp || '956740';
+                const isDelivered = selectedPackage.status === 'DELIVERED' || relatedDelivery?.status === 'DELIVERED';
+                const isInTransit = selectedPackage.status === 'IN_TRANSIT' || selectedPackage.status === 'PICKED_UP' || relatedDelivery?.status === 'IN_TRANSIT' || Boolean(relatedDelivery?.pickup_verified);
+
                 return (
-                  <div className="p-3.5 rounded-xl bg-sky-950/50 border border-sky-700/70 shadow-md flex items-center justify-between text-xs text-sky-100">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-lg bg-sky-900/60 border border-sky-700/80 flex items-center justify-center shrink-0">
-                        <CheckCircle2 className="w-4 h-4 text-sky-400" />
+                  <div className="space-y-3">
+                    {/* Carrier Assigned Summary */}
+                    <div className="p-3.5 rounded-xl bg-sky-950/50 border border-sky-700/70 shadow-md flex items-center justify-between text-xs text-sky-100">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-sky-900/60 border border-sky-700/80 flex items-center justify-center shrink-0">
+                          <CheckCircle2 className="w-4 h-4 text-sky-400" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-xs flex items-center gap-2">
+                            <span>Carrier Assigned: {commuterName}</span>
+                            {acceptedMatch && (
+                              <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                                {acceptedMatch.commuter_reliability}% Reliability
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-300 mt-0.5">
+                            {acceptedMatch?.route_detail?.route_name || 'Commuter Corridor'}
+                            {acceptedMatch?.estimated_detour !== undefined && ` (Detour: +${acceptedMatch.estimated_detour} km)`}
+                          </div>
+                        </div>
                       </div>
-                      <div>
-                        <div className="font-bold text-white text-xs flex items-center gap-2">
-                          <span>Carrier Assigned: {acceptedMatch.commuter_name}</span>
-                          <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800/40">
-                            {acceptedMatch.commuter_reliability}% Reliability
+                      <div className="text-right shrink-0">
+                        <div className="text-[10px] text-slate-400">Carrier Payout</div>
+                        <div className="font-bold text-emerald-400 text-sm">
+                          ₹{acceptedMatch?.commuter_earnings || Math.round(selectedPackage.offered_reward * 0.75)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Step 1 Handover: Clean Read-only Verification Info Card (Vendor never inputs OTP) */}
+                    {!isInTransit && !isDelivered ? (
+                      <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-600/70 shadow-lg shadow-amber-950/30 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                            <KeyRound className="w-4 h-4 text-amber-400" />
+                            <span>Pickup Verification Code:</span>
+                            <span className="font-mono text-base font-black text-white bg-slate-950 px-3 py-1 rounded-lg border border-amber-600/80 tracking-widest shadow-inner">
+                              {pickupOtp}
+                            </span>
+                          </div>
+                          <span className="text-[10px] font-bold text-amber-300 bg-amber-900/60 px-2.5 py-0.5 rounded-full border border-amber-700/60">
+                            Awaiting Pickup
                           </span>
                         </div>
-                        <div className="text-[11px] text-slate-300 mt-0.5">
-                          {acceptedMatch.route_detail?.route_name || 'Commuter Corridor'} (Detour: +{acceptedMatch.estimated_detour} km)
-                        </div>
+                        <p className="text-[11px] text-amber-200/90 leading-relaxed">
+                          Show this 6-digit code to commuter <strong className="text-white">{commuterName}</strong> when handing over the physical parcel.
+                        </p>
                       </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <div className="text-[10px] text-slate-400">Carrier Payout</div>
-                      <div className="font-bold text-emerald-400 text-sm">₹{acceptedMatch.commuter_earnings}</div>
-                    </div>
+                    ) : isInTransit && !isDelivered ? (
+                      /* Clean In-Transit Status Badge (no empty/disabled inputs) */
+                      <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-700/60 shadow-sm flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-emerald-300">
+                          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                          <span>Handover verified! Parcel is in transit with <strong className="text-white">{commuterName}</strong>.</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-emerald-300 bg-emerald-950 px-2.5 py-0.5 rounded-full border border-emerald-700/60 uppercase tracking-wider">
+                          In Transit
+                        </span>
+                      </div>
+                    ) : (
+                      /* Clean Delivered Status Badge (no empty/disabled inputs) */
+                      <div className="p-3.5 rounded-xl bg-teal-950/40 border border-teal-700/60 shadow-sm flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs text-teal-300">
+                          <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                          <span>Package safely delivered & settled! Handover confirmed by recipient.</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-teal-300 bg-teal-950 px-2.5 py-0.5 rounded-full border border-teal-700/60 uppercase tracking-wider">
+                          Delivered & Settled
+                        </span>
+                      </div>
+                    )}
                   </div>
                 );
               })()}

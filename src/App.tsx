@@ -196,7 +196,7 @@ export default function App() {
 
         {/* Route: /otp-station (Protected Verification Station) */}
         {currentPath === '/otp-station' && currentUser && (
-          <OtpVerificationStation />
+          <OtpVerificationStation userRole={currentUser.role} />
         )}
       </main>
     </div>

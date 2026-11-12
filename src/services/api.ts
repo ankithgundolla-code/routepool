@@ -317,6 +317,15 @@ function formatApiError(data: any, fallbackMessage: string): string {
   return fallbackMessage;
 }
 
+const rawApiBaseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_BASE_URL)
+  ? String(import.meta.env.VITE_API_BASE_URL).trim()
+  : '';
+const API_BASE_URL = rawApiBaseUrl
+  ? (rawApiBaseUrl.replace(/\/+$/, '').endsWith('/api')
+      ? rawApiBaseUrl.replace(/\/+$/, '')
+      : `${rawApiBaseUrl.replace(/\/+$/, '')}/api`)
+  : '/api';
+
 class ApiService {
   public isConnectedToDjango: boolean = false;
 
@@ -356,7 +365,8 @@ class ApiService {
 
     let res: Response;
     try {
-      res = await fetch(`/api${endpoint}`, {
+      const normalizedEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+      res = await fetch(`${API_BASE_URL}${normalizedEndpoint}`, {
         ...options,
         headers: {
           ...headers,

@@ -130,6 +130,7 @@ export interface Match {
 export interface Delivery {
   id: number;
   match: number;
+  package_id?: number;
   match_detail?: Match;
   package_name: string;
   vendor_business: string;
@@ -137,7 +138,11 @@ export interface Delivery {
   commuter_phone?: string;
   vendor_phone?: string;
   pickup_location: string;
+  pickup_lat?: number;
+  pickup_lng?: number;
   destination: string;
+  dest_lat?: number;
+  dest_lng?: number;
   offered_reward: number;
   direct_distance_km: number;
   pickup_otp: string;

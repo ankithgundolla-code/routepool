@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import { ArrowLeftRight, AlertCircle, Loader2, Navigation } from 'lucide-react';
 import { LocationCombobox } from './LocationCombobox';
+import { fetchRoadRoute } from '../services/routing';
 
 export interface LocationPoint {
   location: string;
@@ -163,15 +164,19 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     });
     mapInstanceRef.current = map;
 
-    // Watermark-free OpenStreetMap tiles styled to dark navy theme via CSS filter
-    const tileLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      className: 'routepool-dark-tiles',
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
-    }).addTo(map);
+    // Official OpenStreetMap tiles styled to dark theme via CSS filter (zero watermarks / zero API keys)
+    const osmDarkLayer = L.tileLayer(
+      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      {
+        subdomains: ['a', 'b', 'c'],
+        maxZoom: 19,
+        className: 'map-tiles-dark',
+        attribution:
+          '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> contributors',
+      }
+    ).addTo(map);
 
-    tileLayer.on('tileerror', () => {
+    osmDarkLayer.on('tileerror', () => {
       setTileError(true);
     });
 
@@ -246,33 +251,44 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    const createCustomIcon = (type: 'P' | 'D', isEmerald: boolean) => {
-      const bgColor = isEmerald ? '#10b981' : '#06b6d4';
-      const label = type === 'P' ? 'Pickup' : 'Dest';
+    const createGpsPin = (color: string): L.DivIcon => {
+      const svg = `
+        <svg width="30" height="38" viewBox="0 0 30 38" fill="none" xmlns="http://www.w3.org/2000/svg" style="filter: drop-shadow(0 4px 6px rgba(0,0,0,0.55));">
+          <path d="M15 37C15 37 28 23.5 28 14C28 6.8203 22.1797 1 15 1C7.8203 1 2 6.8203 2 14C2 23.5 15 37 15 37Z" fill="${color}" stroke="#FFFFFF" stroke-width="2"/>
+          <circle cx="15" cy="14" r="5" fill="#FFFFFF"/>
+        </svg>
+      `;
       return L.divIcon({
-        className: 'custom-map-marker',
-        html: `
-          <div style="position: relative; transform: translate(-50%, -100%); display: flex; flex-direction: column; align-items: center;">
-            <div style="background-color: ${bgColor}; color: #020617; font-weight: 800; font-size: 11px; padding: 2px 8px; border-radius: 9999px; box-shadow: 0 4px 12px rgba(0,0,0,0.5); border: 2px solid #ffffff; white-space: nowrap; display: flex; align-items: center; gap: 4px;">
-              <span>${type}</span>
-              <span style="font-size: 9px; opacity: 0.85;">${label}</span>
-            </div>
-            <div style="width: 2px; height: 10px; background-color: ${bgColor};"></div>
-            <div style="width: 8px; height: 8px; border-radius: 50%; background-color: ${bgColor}; border: 1.5px solid #ffffff;"></div>
-          </div>
-        `,
-        iconSize: [30, 42],
-        iconAnchor: [15, 42],
+        className: 'routepool-pin-marker',
+        html: `<div style="position:relative; width:30px; height:38px; cursor:pointer;">${svg}</div>`,
+        iconSize: [30, 38],
+        iconAnchor: [15, 38],
+        popupAnchor: [0, -36],
       });
     };
 
-    // Update Pickup Marker
+    // Update Pickup Marker (Emerald Green GPS Pin with white dot)
     if (pickupValue.lat && pickupValue.lng) {
       if (!pickupMarkerRef.current) {
         pickupMarkerRef.current = L.marker([pickupValue.lat, pickupValue.lng], {
-          icon: createCustomIcon('P', true),
+          icon: createGpsPin('#10b981'),
           draggable: true,
-        }).addTo(map);
+        })
+          .bindTooltip(pickupValue.location || 'Pickup Location', {
+            direction: 'top',
+            offset: [0, -36],
+            className: 'routepool-map-tooltip',
+          })
+          .bindPopup(`
+            <div style="min-width: 140px;">
+              <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#10b981;font-size:11px;margin-bottom:2px;">
+                <span style="width:6px;height:6px;border-radius:50%;background:#10b981;"></span>
+                Pickup Location
+              </div>
+              <div style="font-size:11px;color:#cbd5e1;word-break:break-word;">${pickupValue.location || 'Selected Point'}</div>
+            </div>
+          `)
+          .addTo(map);
 
         pickupMarkerRef.current.on('dragend', async (e: any) => {
           const pos = e.target.getLatLng();
@@ -287,19 +303,35 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
         });
       } else {
         pickupMarkerRef.current.setLatLng([pickupValue.lat, pickupValue.lng]);
+        pickupMarkerRef.current.setTooltipContent(pickupValue.location || 'Pickup Location');
       }
     } else if (pickupMarkerRef.current) {
       pickupMarkerRef.current.remove();
       pickupMarkerRef.current = null;
     }
 
-    // Update Destination Marker
+    // Update Destination Marker (Crimson Red GPS Pin with white dot)
     if (destValue.lat && destValue.lng) {
       if (!destMarkerRef.current) {
         destMarkerRef.current = L.marker([destValue.lat, destValue.lng], {
-          icon: createCustomIcon('D', false),
+          icon: createGpsPin('#ef4444'),
           draggable: true,
-        }).addTo(map);
+        })
+          .bindTooltip(destValue.location || 'Destination Drop-off', {
+            direction: 'top',
+            offset: [0, -36],
+            className: 'routepool-map-tooltip',
+          })
+          .bindPopup(`
+            <div style="min-width: 140px;">
+              <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#ef4444;font-size:11px;margin-bottom:2px;">
+                <span style="width:6px;height:6px;border-radius:50%;background:#ef4444;"></span>
+                Destination Drop-off
+              </div>
+              <div style="font-size:11px;color:#cbd5e1;word-break:break-word;">${destValue.location || 'Selected Point'}</div>
+            </div>
+          `)
+          .addTo(map);
 
         destMarkerRef.current.on('dragend', async (e: any) => {
           const pos = e.target.getLatLng();
@@ -314,41 +346,92 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
         });
       } else {
         destMarkerRef.current.setLatLng([destValue.lat, destValue.lng]);
+        destMarkerRef.current.setTooltipContent(destValue.location || 'Destination Drop-off');
       }
     } else if (destMarkerRef.current) {
       destMarkerRef.current.remove();
       destMarkerRef.current = null;
     }
 
-    // Connect both points with dashed polyline
+    // Connect both points with real road trajectory and auto-fit bounds
+    let routeAbort: AbortController | null = null;
+
     if (pickupValue.lat && pickupValue.lng && destValue.lat && destValue.lng) {
-      const points: L.LatLngExpression[] = [
+      const fallbackPoints: L.LatLngExpression[] = [
         [pickupValue.lat, pickupValue.lng],
         [destValue.lat, destValue.lng],
       ];
 
+      const strokeColor = accentColor === 'emerald' ? '#10b981' : '#06b6d4';
+
       if (!polylineRef.current) {
-        polylineRef.current = L.polyline(points, {
-          color: accentColor === 'emerald' ? '#10b981' : '#06b6d4',
+        polylineRef.current = L.polyline(fallbackPoints, {
+          color: strokeColor,
           weight: 4,
-          opacity: 0.85,
-          dashArray: '8, 8',
+          opacity: 0.95,
+          lineCap: 'round',
+          lineJoin: 'round',
         }).addTo(map);
       } else {
-        polylineRef.current.setLatLngs(points);
+        polylineRef.current.setLatLngs(fallbackPoints);
+        polylineRef.current.setStyle({
+          color: strokeColor,
+          weight: 4,
+          opacity: 0.95,
+        });
       }
 
-      // Auto fit bounds to both points with gentle padding
+      // Auto-fit bounds of both active points with standard padding [50, 50] to avoid pin clipping
       try {
-        map.fitBounds(
-          L.latLngBounds([pickupValue.lat, pickupValue.lng], [destValue.lat, destValue.lng]),
-          { padding: [40, 40], maxZoom: 14 }
-        );
+        const bounds = L.latLngBounds([pickupValue.lat, pickupValue.lng], [destValue.lat, destValue.lng]);
+        if (bounds.isValid()) {
+          map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
+        }
       } catch {}
+
+      // Asynchronously fetch real street road trajectory from OSRM
+      routeAbort = new AbortController();
+      fetchRoadRoute([[pickupValue.lat, pickupValue.lng], [destValue.lat, destValue.lng]], routeAbort.signal)
+        .then((roadCoords) => {
+          if (roadCoords && roadCoords.length > 1 && polylineRef.current && mapInstanceRef.current) {
+            polylineRef.current.setLatLngs(roadCoords);
+            try {
+              const roadBounds = L.latLngBounds(roadCoords);
+              if (roadBounds.isValid()) {
+                mapInstanceRef.current.fitBounds(roadBounds, { padding: [50, 50], maxZoom: 14 });
+              }
+            } catch {}
+          }
+        })
+        .catch(() => {
+          // Graceful fallback to initial line
+        });
+    } else if (pickupValue.lat && pickupValue.lng) {
+      try {
+        map.setView([pickupValue.lat, pickupValue.lng], 14);
+      } catch {}
+      if (polylineRef.current) {
+        polylineRef.current.remove();
+        polylineRef.current = null;
+      }
+    } else if (destValue.lat && destValue.lng) {
+      try {
+        map.setView([destValue.lat, destValue.lng], 14);
+      } catch {}
+      if (polylineRef.current) {
+        polylineRef.current.remove();
+        polylineRef.current = null;
+      }
     } else if (polylineRef.current) {
       polylineRef.current.remove();
       polylineRef.current = null;
     }
+
+    return () => {
+      if (routeAbort) {
+        routeAbort.abort();
+      }
+    };
   }, [pickupValue.lat, pickupValue.lng, destValue.lat, destValue.lng, accentColor]);
 
   const handleSwap = () => {
@@ -363,7 +446,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     if (mapInstanceRef.current && prevDest.lat && prevPickup.lat) {
       mapInstanceRef.current.fitBounds(
         L.latLngBounds([prevDest.lat, prevDest.lng], [prevPickup.lat, prevPickup.lng]),
-        { padding: [40, 40], maxZoom: 14 }
+        { padding: [50, 50], maxZoom: 14 }
       );
     }
   };
@@ -457,19 +540,19 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
                 }`}
               >
                 <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                <span>Pickup Pin (P)</span>
+                <span>Pickup Pin</span>
               </button>
               <button
                 type="button"
                 onClick={() => setActivePinTarget('dest')}
                 className={`px-2.5 py-1 rounded-md transition-all cursor-pointer font-medium flex items-center gap-1.5 ${
                   activePinTarget === 'dest'
-                    ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                    ? 'bg-rose-500 text-slate-950 font-bold shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
-                <span className="w-2 h-2 rounded-full bg-cyan-400"></span>
-                <span>Destination Pin (D)</span>
+                <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                <span>Destination Pin</span>
               </button>
             </div>
           </div>
