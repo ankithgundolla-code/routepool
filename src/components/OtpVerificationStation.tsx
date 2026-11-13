@@ -295,6 +295,47 @@ export const OtpVerificationStation: React.FC<OtpVerificationStationProps> = ({ 
                 );
               })()}
 
+              {/* Presentation & Demo Dual-OTP Display Card */}
+              <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-xs font-bold text-amber-400 uppercase tracking-wider">
+                    <KeyRound className="w-4 h-4 text-amber-400" />
+                    <span>Dual-OTP Handover Codes (Demo / Presentation)</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                    Zero SMS Cost Verification
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {/* Card 1: Pickup OTP */}
+                  <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-600/70 shadow-md space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-amber-400">Pickup OTP:</span>
+                      <span className="font-mono text-base font-black text-white bg-slate-950 px-2.5 py-0.5 rounded border border-amber-600/80 tracking-widest shadow-inner">
+                        {selectedDelivery.pickup_otp || '956740'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-amber-200/90 leading-tight">
+                      Vendor presents this code to Commuter at pickup
+                    </p>
+                  </div>
+
+                  {/* Card 2: Delivery OTP */}
+                  <div className="p-3.5 rounded-xl bg-teal-950/40 border border-teal-600/70 shadow-md space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-teal-400">Delivery OTP:</span>
+                      <span className="font-mono text-base font-black text-white bg-slate-950 px-2.5 py-0.5 rounded border border-teal-600/80 tracking-widest shadow-inner">
+                        {selectedDelivery.delivery_otp || '482190'}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-teal-200/90 leading-tight">
+                      Recipient provides this code to Commuter upon arrival
+                    </p>
+                  </div>
+                </div>
+              </div>
+
               {/* Step 1: Pickup OTP Verification */}
               <div className={`p-5 rounded-xl border transition-all ${
                 selectedDelivery.pickup_verified
@@ -400,9 +441,7 @@ export const OtpVerificationStation: React.FC<OtpVerificationStationProps> = ({ 
 
               {/* Step 2: Delivery OTP Verification */}
               <div className={`p-5 rounded-xl border transition-all ${
-                !selectedDelivery.pickup_verified
-                  ? 'opacity-40 pointer-events-none bg-slate-950/20 border-slate-800'
-                  : selectedDelivery.delivery_verified
+                selectedDelivery.delivery_verified
                   ? 'bg-slate-950/40 border-slate-800 opacity-90'
                   : 'bg-slate-950 border-teal-600/50 shadow-md shadow-teal-950/20'
               }`}>
@@ -421,25 +460,23 @@ export const OtpVerificationStation: React.FC<OtpVerificationStationProps> = ({ 
                     </p>
                   </div>
 
-                  {role !== 'vendor' && (
-                    <div className="p-3 rounded-lg bg-slate-900 border border-teal-800/60 text-center shrink-0">
-                      <div className="text-[10px] text-slate-400 uppercase font-semibold">Recipient's OTP</div>
-                      <div className="text-xl font-mono font-black text-teal-400 tracking-widest mt-0.5">
-                        {selectedDelivery.delivery_otp || '•••••• (Ask Recipient)'}
-                      </div>
+                  <div className="p-3 rounded-lg bg-slate-900 border border-teal-800/60 text-center shrink-0">
+                    <div className="text-[10px] text-slate-400 uppercase font-semibold">Recipient's Drop-off OTP</div>
+                    <div className="text-xl font-mono font-black text-teal-400 tracking-widest mt-0.5">
+                      {selectedDelivery.delivery_otp || '482190'}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {role === 'vendor' ? (
                   !selectedDelivery.delivery_verified ? (
-                    <div className="mt-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex items-center justify-between text-xs text-slate-300">
+                    <div className="mt-3 p-3.5 rounded-xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs text-slate-300">
                       <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-teal-400" />
-                        <span>Carrier is traveling towards <strong className="text-white">{selectedDelivery.destination}</strong>. Recipient will verify handover.</span>
+                        <Clock className="w-4 h-4 text-teal-400 shrink-0" />
+                        <span>Carrier traveling to <strong className="text-white">{selectedDelivery.destination}</strong>. Recipient Drop-off OTP: <strong className="font-mono text-white bg-slate-900 px-2 py-0.5 rounded border border-teal-700/60">{selectedDelivery.delivery_otp || '482190'}</strong></span>
                       </div>
-                      <span className="text-[10px] uppercase font-bold text-teal-400 bg-teal-950/60 px-2.5 py-0.5 rounded-full border border-teal-800/60">
-                        In Transit
+                      <span className="text-[10px] uppercase font-bold text-teal-400 bg-teal-950/60 px-2.5 py-0.5 rounded-full border border-teal-800/60 shrink-0">
+                        {selectedDelivery.pickup_verified ? 'In Transit' : 'Pending Pickup'}
                       </span>
                     </div>
                   ) : (
@@ -454,38 +491,44 @@ export const OtpVerificationStation: React.FC<OtpVerificationStationProps> = ({ 
                     </div>
                   )
                 ) : (
-                  !selectedDelivery.delivery_verified && selectedDelivery.pickup_verified ? (
-                    <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-col sm:flex-row items-center gap-3">
-                      <input
-                        type="text"
-                        maxLength={6}
-                        placeholder="Enter 6-digit Delivery OTP"
-                        value={deliveryOtpInput}
-                        onChange={(e) => setDeliveryOtpInput(e.target.value)}
-                        className="w-full sm:w-64 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-center tracking-widest outline-none focus:border-teal-400 text-sm"
-                      />
-                      <button
-                        onClick={handleVerifyDelivery}
-                        className="w-full sm:w-auto px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>Complete Delivery & Disburse Reward</span>
-                      </button>
-                      {selectedDelivery.delivery_otp && (
+                  !selectedDelivery.delivery_verified ? (
+                    <div className="mt-4 pt-4 border-t border-slate-800/80">
+                      {!selectedDelivery.pickup_verified && (
+                        <p className="text-[11px] text-amber-300/80 mb-2.5 flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5" />
+                          <span>Tip: Verify Step 1 Pickup OTP first to start transit, then submit the Delivery OTP below to settle.</span>
+                        </p>
+                      )}
+                      <div className="flex flex-col sm:flex-row items-center gap-3">
+                        <input
+                          type="text"
+                          maxLength={6}
+                          placeholder="Enter 6-digit Delivery OTP"
+                          value={deliveryOtpInput}
+                          onChange={(e) => setDeliveryOtpInput(e.target.value)}
+                          className="w-full sm:w-64 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 font-mono text-center tracking-widest outline-none focus:border-teal-400 text-sm"
+                        />
                         <button
-                          onClick={() => setDeliveryOtpInput(selectedDelivery.delivery_otp)}
+                          onClick={handleVerifyDelivery}
+                          className="w-full sm:w-auto px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md cursor-pointer"
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                          <span>Confirm Drop-off & Settle Payout</span>
+                        </button>
+                        <button
+                          onClick={() => setDeliveryOtpInput(selectedDelivery.delivery_otp || '482190')}
                           className="text-[11px] text-slate-500 hover:text-slate-300 underline cursor-pointer"
                         >
                           Auto-fill OTP
                         </button>
-                      )}
+                      </div>
                     </div>
-                  ) : selectedDelivery.delivery_verified ? (
+                  ) : (
                     <div className="text-xs text-emerald-400 flex items-center gap-1.5 mt-2">
                       <CheckCircle2 className="w-4 h-4" />
                       <span>Delivery successfully completed! Rewards and EcoImpact ledger updated.</span>
                     </div>
-                  ) : null
+                  )
                 )}
               </div>
 

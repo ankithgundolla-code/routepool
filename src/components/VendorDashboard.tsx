@@ -701,6 +701,7 @@ export const VendorDashboard: React.FC = () => {
 
                 const commuterName = acceptedMatch?.commuter_name || relatedDelivery?.commuter_name || 'Carrier';
                 const pickupOtp = relatedDelivery?.pickup_otp || '956740';
+                const deliveryOtp = relatedDelivery?.delivery_otp || '482190';
                 const isDelivered = selectedPackage.status === 'DELIVERED' || relatedDelivery?.status === 'DELIVERED';
                 const isInTransit = selectedPackage.status === 'IN_TRANSIT' || selectedPackage.status === 'PICKED_UP' || relatedDelivery?.status === 'IN_TRANSIT' || Boolean(relatedDelivery?.pickup_verified);
 
@@ -735,29 +736,55 @@ export const VendorDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Step 1 Handover: Clean Read-only Verification Info Card (Vendor never inputs OTP) */}
-                    {!isInTransit && !isDelivered ? (
-                      <div className="p-4 rounded-xl bg-amber-950/40 border border-amber-600/70 shadow-lg shadow-amber-950/30 space-y-2.5">
+                    {/* Presentation & Demo Dual-OTP Display Card */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Card 1: Pickup OTP */}
+                      <div className="p-3.5 rounded-xl bg-amber-950/40 border border-amber-600/70 shadow-md space-y-1.5">
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
-                            <KeyRound className="w-4 h-4 text-amber-400" />
-                            <span>Pickup Verification Code:</span>
-                            <span className="font-mono text-base font-black text-white bg-slate-950 px-3 py-1 rounded-lg border border-amber-600/80 tracking-widest shadow-inner">
-                              {pickupOtp}
-                            </span>
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-amber-400">
+                            <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Pickup OTP:</span>
                           </div>
-                          <span className="text-[10px] font-bold text-amber-300 bg-amber-900/60 px-2.5 py-0.5 rounded-full border border-amber-700/60">
-                            Awaiting Pickup
+                          <span className="font-mono text-base font-black text-white bg-slate-950 px-2.5 py-0.5 rounded border border-amber-600/80 tracking-widest shadow-inner">
+                            {pickupOtp}
                           </span>
                         </div>
-                        <p className="text-[11px] text-amber-200/90 leading-relaxed">
-                          Show this 6-digit code to commuter <strong className="text-white">{commuterName}</strong> when handing over the physical parcel.
+                        <p className="text-[11px] text-amber-200/90 leading-tight">
+                          Vendor presents this code to Commuter at pickup
                         </p>
                       </div>
-                    ) : isInTransit && !isDelivered ? (
-                      /* Clean In-Transit Status Badge (no empty/disabled inputs) */
-                      <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-700/60 shadow-sm flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs text-emerald-300">
+
+                      {/* Card 2: Delivery OTP */}
+                      <div className="p-3.5 rounded-xl bg-teal-950/40 border border-teal-600/70 shadow-md space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-teal-400">
+                            <ShieldCheck className="w-3.5 h-3.5 text-teal-400" />
+                            <span>Delivery OTP:</span>
+                          </div>
+                          <span className="font-mono text-base font-black text-white bg-slate-950 px-2.5 py-0.5 rounded border border-teal-600/80 tracking-widest shadow-inner">
+                            {deliveryOtp}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-teal-200/90 leading-tight">
+                          Recipient provides this code to Commuter upon arrival
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Delivery Handover Lifecycle Status */}
+                    {isDelivered ? (
+                      <div className="p-3 rounded-xl bg-teal-950/50 border border-teal-700/60 flex items-center justify-between text-xs text-teal-300">
+                        <div className="flex items-center gap-2 font-medium">
+                          <CheckCircle2 className="w-4 h-4 text-teal-400" />
+                          <span>Package safely delivered & settled! Handover confirmed by recipient.</span>
+                        </div>
+                        <span className="text-[10px] font-bold text-teal-300 bg-teal-950 px-2.5 py-0.5 rounded-full border border-teal-700/60 uppercase tracking-wider">
+                          Delivered & Settled
+                        </span>
+                      </div>
+                    ) : isInTransit ? (
+                      <div className="p-3 rounded-xl bg-emerald-950/50 border border-emerald-700/60 flex items-center justify-between text-xs text-emerald-300">
+                        <div className="flex items-center gap-2 font-medium">
                           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                           <span>Handover verified! Parcel is in transit with <strong className="text-white">{commuterName}</strong>.</span>
                         </div>
@@ -766,14 +793,13 @@ export const VendorDashboard: React.FC = () => {
                         </span>
                       </div>
                     ) : (
-                      /* Clean Delivered Status Badge (no empty/disabled inputs) */
-                      <div className="p-3.5 rounded-xl bg-teal-950/40 border border-teal-700/60 shadow-sm flex items-center justify-between">
-                        <div className="flex items-center gap-2 text-xs text-teal-300">
-                          <CheckCircle2 className="w-4 h-4 text-teal-400" />
-                          <span>Package safely delivered & settled! Handover confirmed by recipient.</span>
+                      <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-700/50 flex items-center justify-between text-xs text-amber-300">
+                        <div className="flex items-center gap-2 font-medium">
+                          <Clock className="w-4 h-4 text-amber-400" />
+                          <span>Awaiting physical pickup by <strong className="text-white">{commuterName}</strong>. Present the Pickup OTP above.</span>
                         </div>
-                        <span className="text-[10px] font-bold text-teal-300 bg-teal-950 px-2.5 py-0.5 rounded-full border border-teal-700/60 uppercase tracking-wider">
-                          Delivered & Settled
+                        <span className="text-[10px] font-bold text-amber-300 bg-amber-950 px-2.5 py-0.5 rounded-full border border-amber-700/60 uppercase tracking-wider">
+                          Awaiting Pickup
                         </span>
                       </div>
                     )}
