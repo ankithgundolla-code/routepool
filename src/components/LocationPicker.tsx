@@ -112,7 +112,7 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
     const controller = new AbortController();
     reverseAbortRef.current = controller;
 
-    let fallbackName = `Map Pin (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+    let fallbackName = 'Selected Map Location';
 
     setReverseGeocoding(true);
     try {
@@ -584,9 +584,13 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0"></span>
               Pickup: {pickupValue.location || 'Not set'}
             </span>
-            <span className="text-slate-500 font-mono shrink-0 ml-2">
-              {pickupValue.lat ? `${pickupValue.lat.toFixed(4)}, ${pickupValue.lng.toFixed(4)}` : 'None'}
-            </span>
+            {pickupValue.lat ? (
+              <span className="text-emerald-400 text-[10px] font-medium bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-800/50 shrink-0 ml-2 flex items-center gap-1">
+                ✓ Set
+              </span>
+            ) : (
+              <span className="text-slate-500 text-[10px] shrink-0 ml-2">Not set</span>
+            )}
           </div>
 
           <div className="flex items-center justify-between bg-slate-950/70 px-2.5 py-1.5 rounded-lg border border-slate-800">
@@ -594,9 +598,13 @@ export const LocationPicker: React.FC<LocationPickerProps> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shrink-0"></span>
               Destination: {destValue.location || 'Not set'}
             </span>
-            <span className="text-slate-500 font-mono shrink-0 ml-2">
-              {destValue.lat ? `${destValue.lat.toFixed(4)}, ${destValue.lng.toFixed(4)}` : 'None'}
-            </span>
+            {destValue.lat ? (
+              <span className="text-cyan-400 text-[10px] font-medium bg-cyan-950/60 px-2 py-0.5 rounded-full border border-cyan-800/50 shrink-0 ml-2 flex items-center gap-1">
+                ✓ Set
+              </span>
+            ) : (
+              <span className="text-slate-500 text-[10px] shrink-0 ml-2">Not set</span>
+            )}
           </div>
         </div>
       </div>

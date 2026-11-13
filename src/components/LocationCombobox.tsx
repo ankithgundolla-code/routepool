@@ -364,15 +364,15 @@ export const LocationCombobox: React.FC<LocationComboboxProps> = ({
         </label>
         {value.lat && value.lng ? (
           <span
-            className={`text-[10px] font-mono flex items-center gap-1 ${
-              accentColor === 'cyan' ? 'text-cyan-400' : 'text-emerald-400'
+            className={`text-[10px] font-medium px-2 py-0.5 rounded-full border flex items-center gap-1 ${
+              accentColor === 'cyan'
+                ? 'bg-cyan-950/60 text-cyan-300 border-cyan-800/50'
+                : 'bg-emerald-950/60 text-emerald-300 border-emerald-800/50'
             }`}
-            title="Geospatial Coordinates"
+            title="Location coordinates set"
           >
             <Check className="w-3 h-3" />
-            <span>
-              {value.lat.toFixed(4)}° N, {value.lng.toFixed(4)}° E
-            </span>
+            <span>Set</span>
           </span>
         ) : required ? (
           <span className="text-[10px] text-amber-400 font-medium">Required</span>
@@ -543,9 +543,6 @@ export const LocationCombobox: React.FC<LocationComboboxProps> = ({
 
                         <div className="text-[11px] text-slate-400 flex items-center justify-between gap-2 mt-0.5">
                           <span className="truncate">{item.area}</span>
-                          <span className="font-mono text-[10px] text-slate-500 shrink-0">
-                            {item.lat.toFixed(4)}, {item.lng.toFixed(4)}
-                          </span>
                         </div>
                       </div>
                     </div>
