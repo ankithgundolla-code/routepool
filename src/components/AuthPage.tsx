@@ -34,6 +34,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [role, setRole] = useState<'vendor' | 'commuter'>(initialRole === 'admin' ? 'vendor' : initialRole);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const setError = setErrorMessage;
 
   // Form inputs
   const [email, setEmail] = useState('');
@@ -64,11 +65,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         const res = await api.login({ email: cleanEmail, password: cleanPassword });
         onAuthSuccess(res.user);
       } catch (err: any) {
-        setErrorMessage(
-          err.message ||
-          (typeof err.data === 'string' ? err.data : (err.data ? JSON.stringify(err.data) : '')) ||
-          'Authentication failed. Please verify your credentials.'
-        );
+        setError(err.message || (typeof err.data === 'string' ? err.data : JSON.stringify(err.data)) || 'Authentication failed. Please verify your credentials.');
       } finally {
         setLoading(false);
       }
@@ -107,11 +104,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         });
         onAuthSuccess(res.user);
       } catch (err: any) {
-        setErrorMessage(
-          err.message ||
-          (typeof err.data === 'string' ? err.data : (err.data ? JSON.stringify(err.data) : '')) ||
-          'Registration failed'
-        );
+        setError(err.message || (typeof err.data === 'string' ? err.data : JSON.stringify(err.data)) || 'Registration failed');
       } finally {
         setLoading(false);
       }
@@ -125,11 +118,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       const res = await api.demoLogin(demoRole);
       onAuthSuccess(res.user);
     } catch (err: any) {
-      setErrorMessage(
-        err.message ||
-        (typeof err.data === 'string' ? err.data : (err.data ? JSON.stringify(err.data) : '')) ||
-        'Demo login failed'
-      );
+      setError(err.message || (typeof err.data === 'string' ? err.data : JSON.stringify(err.data)) || 'Demo login failed');
     } finally {
       setLoading(false);
     }
