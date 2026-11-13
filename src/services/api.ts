@@ -268,10 +268,10 @@ function haversineKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371;
   const dLat = (lat2 - lat1) * Math.PI / 180;
   const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-            Math.sin(dLon/2) * Math.sin(dLon/2);
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return Math.round(R * c * 10) / 10;
 }
 
@@ -322,8 +322,8 @@ const rawApiBaseUrl = (typeof import.meta !== 'undefined' && import.meta.env?.VI
   : '';
 const API_BASE_URL = rawApiBaseUrl
   ? (rawApiBaseUrl.replace(/\/+$/, '').endsWith('/api')
-      ? rawApiBaseUrl.replace(/\/+$/, '')
-      : `${rawApiBaseUrl.replace(/\/+$/, '')}/api`)
+    ? rawApiBaseUrl.replace(/\/+$/, '')
+    : `${rawApiBaseUrl.replace(/\/+$/, '')}/api`)
   : '/api';
 
 class ApiService {
@@ -334,7 +334,7 @@ class ApiService {
       // Clean up legacy localStorage entry if present from previous builds
       try {
         localStorage.removeItem('routepool_access_token');
-      } catch {}
+      } catch { }
       return sessionStorage.getItem('routepool_access_token');
     } catch {
       return null;
@@ -345,9 +345,9 @@ class ApiService {
     try {
       try {
         localStorage.removeItem('routepool_access_token');
-      } catch {}
+      } catch { }
       sessionStorage.setItem('routepool_access_token', token);
-    } catch {}
+    } catch { }
   }
 
   isMockSession(): boolean {
@@ -525,7 +525,7 @@ class ApiService {
     try {
       sessionStorage.removeItem('routepool_access_token');
       localStorage.removeItem('routepool_access_token');
-    } catch {}
+    } catch { }
   }
 
   // Commuter Routes

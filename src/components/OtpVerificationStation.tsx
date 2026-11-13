@@ -248,6 +248,53 @@ export const OtpVerificationStation: React.FC<OtpVerificationStationProps> = ({ 
                 </div>
               </div>
 
+              {/* Waypoints & Navigation Bar */}
+              {(() => {
+                const pLat = selectedDelivery.pickup_lat ?? selectedDelivery.match_detail?.package_detail?.pickup_lat;
+                const pLng = selectedDelivery.pickup_lng ?? selectedDelivery.match_detail?.package_detail?.pickup_lng;
+                const dLat = selectedDelivery.dest_lat ?? selectedDelivery.match_detail?.package_detail?.dest_lat;
+                const dLng = selectedDelivery.dest_lng ?? selectedDelivery.match_detail?.package_detail?.dest_lng;
+
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                    <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[10px] uppercase font-bold text-emerald-400 block">Pickup Location</span>
+                        <span className="text-slate-200 truncate block font-medium" title={selectedDelivery.pickup_location}>{selectedDelivery.pickup_location}</span>
+                      </div>
+                      {typeof pLat === 'number' && typeof pLng === 'number' && (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${pLat},${pLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded px-2.5 py-1 inline-flex items-center gap-1.5 shrink-0 transition-colors font-medium shadow-sm hover:text-cyan-300"
+                          title="Navigate to Pickup in Google Maps"
+                        >
+                          <span>🧭 Navigate to Pickup</span>
+                        </a>
+                      )}
+                    </div>
+                    <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800 flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="text-[10px] uppercase font-bold text-rose-400 block">Destination Drop-off</span>
+                        <span className="text-slate-200 truncate block font-medium" title={selectedDelivery.destination}>{selectedDelivery.destination}</span>
+                      </div>
+                      {typeof dLat === 'number' && typeof dLng === 'number' && (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${dLat},${dLng}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded px-2.5 py-1 inline-flex items-center gap-1.5 shrink-0 transition-colors font-medium shadow-sm hover:text-cyan-300"
+                          title="Navigate to Drop-off in Google Maps"
+                        >
+                          <span>🧭 Navigate to Drop-off</span>
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Step 1: Pickup OTP Verification */}
               <div className={`p-5 rounded-xl border transition-all ${
                 selectedDelivery.pickup_verified

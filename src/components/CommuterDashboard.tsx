@@ -409,6 +409,127 @@ export const CommuterDashboard: React.FC = () => {
         </div>
       </div>
 
+      {/* Active Deliveries in Progress */}
+      {(() => {
+        const activeDeliveries = deliveries.filter(d => ['PICKUP_PENDING', 'PICKED_UP', 'IN_TRANSIT'].includes(d.status));
+        if (activeDeliveries.length === 0) return null;
+
+        return (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400"></span>
+                </span>
+                <span>Active Deliveries In Progress</span>
+                <span className="text-[10px] font-bold text-emerald-400 bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800/40">
+                  {activeDeliveries.length} Active
+                </span>
+              </h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {activeDeliveries.map((del) => {
+                const pLat = del.pickup_lat ?? del.match_detail?.package_detail?.pickup_lat;
+                const pLng = del.pickup_lng ?? del.match_detail?.package_detail?.pickup_lng;
+                const dLat = del.dest_lat ?? del.match_detail?.package_detail?.dest_lat;
+                const dLng = del.dest_lng ?? del.match_detail?.package_detail?.dest_lng;
+
+                return (
+                  <div
+                    key={del.id}
+                    className="p-4 rounded-xl bg-slate-900 border border-emerald-500/50 shadow-lg shadow-emerald-950/20 space-y-3"
+                  >
+                    <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-slate-800">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-emerald-950/80 border border-emerald-700/60 flex items-center justify-center shrink-0">
+                          <PackageIcon className="w-4 h-4 text-emerald-400" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-white text-sm flex items-center gap-2">
+                            <span>{del.package_name}</span>
+                            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                              {del.status.replace('_', ' ')}
+                            </span>
+                          </div>
+                          <div className="text-xs text-slate-400">
+                            Vendor: <strong className="text-slate-200">{del.vendor_business}</strong>
+                            <span className="mx-1.5">·</span>
+                            <span>Delivery #{del.id}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-base font-extrabold text-emerald-400">₹{del.offered_reward}</div>
+                        <div className="text-[10px] text-slate-500">Reward</div>
+                      </div>
+                    </div>
+
+                    {/* Pickup & Destination Navigation Rows */}
+                    <div className="space-y-2 text-xs">
+                      {/* Pickup Address + Navigation */}
+                      <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 mt-1 shrink-0"></span>
+                          <div className="min-w-0">
+                            <span className="text-[10px] uppercase font-bold text-emerald-400 block">Pickup Location</span>
+                            <span className="text-slate-200 truncate block font-medium" title={del.pickup_location}>{del.pickup_location}</span>
+                          </div>
+                        </div>
+                        {typeof pLat === 'number' && typeof pLng === 'number' && (
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${pLat},${pLng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded px-2.5 py-1 inline-flex items-center gap-1.5 shrink-0 transition-colors font-medium shadow-sm"
+                          >
+                            <span>🧭 Navigate to Pickup</span>
+                          </a>
+                        )}
+                      </div>
+
+                      {/* Destination Address + Navigation */}
+                      <div className="p-2.5 rounded-lg bg-slate-950/70 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="flex items-start gap-2 min-w-0">
+                          <span className="w-2 h-2 rounded-full bg-rose-400 mt-1 shrink-0"></span>
+                          <div className="min-w-0">
+                            <span className="text-[10px] uppercase font-bold text-rose-400 block">Destination Drop-off</span>
+                            <span className="text-slate-200 truncate block font-medium" title={del.destination}>{del.destination}</span>
+                          </div>
+                        </div>
+                        {typeof dLat === 'number' && typeof dLng === 'number' && (
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${dLat},${dLng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded px-2.5 py-1 inline-flex items-center gap-1.5 shrink-0 transition-colors font-medium shadow-sm"
+                          >
+                            <span>🧭 Navigate to Drop-off</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Status helper banner */}
+                    <div className="pt-2 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                      <span>
+                        {!del.pickup_verified
+                          ? '🟡 Collect parcel from vendor & verify Pickup OTP at station'
+                          : '🟢 In transit! Deliver to destination & verify Drop-off OTP'}
+                      </span>
+                      <span className="font-semibold text-cyan-400">
+                        {!del.pickup_verified ? 'Step 1: Pickup Handover' : 'Step 2: Recipient Handover'}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Main Grid: Opportunities & Route Management */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-7 space-y-4">
@@ -528,10 +649,24 @@ export const CommuterDashboard: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-2.5 border-t border-slate-800/60 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400">
-                        Pickup: <span className="text-slate-300">{opp.package_detail?.pickup_location}</span>
-                      </span>
+                    <div className="mt-4 pt-2.5 border-t border-slate-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] text-slate-400">
+                          Pickup: <span className="text-slate-300">{opp.package_detail?.pickup_location}</span>
+                        </span>
+                        {typeof opp.package_detail?.pickup_lat === 'number' && typeof opp.package_detail?.pickup_lng === 'number' && (
+                          <a
+                            href={`https://www.google.com/maps/dir/?api=1&destination=${opp.package_detail.pickup_lat},${opp.package_detail.pickup_lng}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded px-2.5 py-1 inline-flex items-center gap-1.5 transition-colors cursor-pointer"
+                            title="Navigate to Pickup in Google Maps"
+                          >
+                            <span>🧭 Navigate to Pickup</span>
+                          </a>
+                        )}
+                      </div>
                       {opp.status === 'ACCEPTED' ? (
                         <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
                           <CheckCircle2 className="w-3.5 h-3.5" />
@@ -658,6 +793,61 @@ export const CommuterDashboard: React.FC = () => {
 
                   {selectedOpp ? (
                     <div className="space-y-3">
+                      {/* Commuter Opportunity Pickup & Drop-off Navigation Points */}
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 space-y-2.5 text-xs">
+                        <div className="flex items-center justify-between pb-1.5 border-b border-slate-800/80">
+                          <span className="font-semibold text-white flex items-center gap-1.5">
+                            <MapPin className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Waypoints & Navigation</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400">Google Maps</span>
+                        </div>
+
+                        {/* Pickup Address & Navigation Action */}
+                        <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-[10px] uppercase font-bold text-emerald-400 block">Pickup Location</span>
+                            <span className="text-slate-200 truncate block font-medium" title={selectedOpp.package_detail?.pickup_location}>
+                              {selectedOpp.package_detail?.pickup_location || 'Vendor Pickup Point'}
+                            </span>
+                          </div>
+                          {typeof selectedOpp.package_detail?.pickup_lat === 'number' && typeof selectedOpp.package_detail?.pickup_lng === 'number' && (
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${selectedOpp.package_detail.pickup_lat},${selectedOpp.package_detail.pickup_lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded px-2.5 py-1 inline-flex items-center gap-1.5 shrink-0 transition-colors font-medium shadow-sm hover:text-cyan-300"
+                              title="Navigate to Pickup in Google Maps"
+                            >
+                              <span>🧭</span>
+                              <span>Navigate to Pickup</span>
+                            </a>
+                          )}
+                        </div>
+
+                        {/* Destination Address & Navigation Action */}
+                        <div className="p-2.5 rounded-lg bg-slate-900/80 border border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                          <div className="min-w-0">
+                            <span className="text-[10px] uppercase font-bold text-rose-400 block">Destination Drop-off</span>
+                            <span className="text-slate-200 truncate block font-medium" title={selectedOpp.package_detail?.destination}>
+                              {selectedOpp.package_detail?.destination || 'Client Destination Point'}
+                            </span>
+                          </div>
+                          {typeof selectedOpp.package_detail?.dest_lat === 'number' && typeof selectedOpp.package_detail?.dest_lng === 'number' && (
+                            <a
+                              href={`https://www.google.com/maps/dir/?api=1&destination=${selectedOpp.package_detail.dest_lat},${selectedOpp.package_detail.dest_lng}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 rounded px-2.5 py-1 inline-flex items-center gap-1.5 shrink-0 transition-colors font-medium shadow-sm hover:text-cyan-300"
+                              title="Navigate to Drop-off in Google Maps"
+                            >
+                              <span>🧭</span>
+                              <span>Navigate to Drop-off</span>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+
                       <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2">
                         <div className="flex justify-between">
                           <span className="text-slate-400">Normal Travel Distance:</span>
