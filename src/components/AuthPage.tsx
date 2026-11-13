@@ -64,7 +64,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         const res = await api.login({ email: cleanEmail, password: cleanPassword });
         onAuthSuccess(res.user);
       } catch (err: any) {
-        setErrorMessage(err.message || 'Authentication failed. Please verify your credentials.');
+        setErrorMessage(
+          err.message ||
+          (typeof err.data === 'string' ? err.data : (err.data ? JSON.stringify(err.data) : '')) ||
+          'Authentication failed. Please verify your credentials.'
+        );
       } finally {
         setLoading(false);
       }
@@ -103,7 +107,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         });
         onAuthSuccess(res.user);
       } catch (err: any) {
-        setErrorMessage(err.message || 'Registration failed. Please verify your details.');
+        setErrorMessage(
+          err.message ||
+          (typeof err.data === 'string' ? err.data : (err.data ? JSON.stringify(err.data) : '')) ||
+          'Registration failed'
+        );
       } finally {
         setLoading(false);
       }
@@ -117,7 +125,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       const res = await api.demoLogin(demoRole);
       onAuthSuccess(res.user);
     } catch (err: any) {
-      setErrorMessage(err.message || 'Demo login failed');
+      setErrorMessage(
+        err.message ||
+        (typeof err.data === 'string' ? err.data : (err.data ? JSON.stringify(err.data) : '')) ||
+        'Demo login failed'
+      );
     } finally {
       setLoading(false);
     }

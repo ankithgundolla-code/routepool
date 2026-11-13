@@ -8,10 +8,13 @@ from .serializers import RegisterSerializer, UserProfileSerializer, CustomTokenO
 User = get_user_model()
 
 class CustomTokenObtainPairView(TokenObtainPairView):
+    permission_classes = [permissions.AllowAny]
+    authentication_classes = ()
     serializer_class = CustomTokenObtainPairSerializer
 
 class RegisterView(views.APIView):
     permission_classes = [permissions.AllowAny]
+    authentication_classes = ()
 
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
@@ -26,7 +29,7 @@ class RegisterView(views.APIView):
             import logging
             logging.getLogger(__name__).exception("Registration unexpected failure: %s", exc)
             return Response(
-                {'non_field_errors': ['Unable to complete registration. Please verify your details and try again.']},
+                {'non_field_errors': [str(exc) or 'Unable to complete registration. Please verify your details and try again.']},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
@@ -59,6 +62,7 @@ class ProfileView(views.APIView):
 class DemoLoginView(views.APIView):
     """Explicit 1-click role switcher strictly for project demo evaluation (vendor, commuter, admin)"""
     permission_classes = [permissions.AllowAny]
+    authentication_classes = ()
 
     ALLOWED_DEMO_ROLES = {'vendor', 'commuter', 'admin'}
 

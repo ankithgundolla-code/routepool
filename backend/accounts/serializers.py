@@ -9,12 +9,15 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     username_field = 'email'
 
     def validate(self, attrs):
-        email = attrs.get('email', '')
+        email = (attrs.get('email') or '').strip().lower()
         password = attrs.get('password', '')
-        if not email or not str(email).strip():
+        if not email:
             raise serializers.ValidationError({'email': ['Email address is required.']})
         if not password or not str(password).strip():
             raise serializers.ValidationError({'password': ['Password is required.']})
+
+        attrs['email'] = email
+        attrs.setdefault('username', email)
 
         data = super().validate(attrs)
         data['user'] = {
@@ -140,7 +143,15 @@ class RegisterSerializer(serializers.ModelSerializer):
             validated_data['phone'] = ''
 
         try:
-            user = User.objects.create_user(password=password, **validated_data)
+            user = User(
+                email=email,
+                username=validated_data.get('username', email),
+                name=validated_data.get('name', ''),
+                phone=validated_data.get('phone', ''),
+                role=role
+            )
+            user.set_password(password)
+            user.save()
         except IntegrityError:
             raise serializers.ValidationError({
                 'email': ['An account with this email address already exists. Please sign in instead.']
@@ -148,12 +159,18 @@ class RegisterSerializer(serializers.ModelSerializer):
 
         if role == 'vendor':
             from vendors.models import Vendor
-            Vendor.objects.create(
+            Vendor.objects.get_or_create(
                 user=user,
-                business_name=business_name or f"{user.name}'s Store",
-                location=business_address or "Hyderabad Central Market",
-                lat=lat,
-                lng=lng
+                defaults={
+                    'business_name': business_name or f"{user.name or user.email}'s Store",
+                    'location': business_address or "Hyderabad Central Market",
+                    'lat': lat,
+                    'lng': lng
+                }
             )
+        elif role == 'commuter':
+            # Commuter is identified via user.role='commuter'; profile is safely verified/initialized
+            user.role = 'commuter'
+            user.save(update_fields=['role'])
 
         return user
