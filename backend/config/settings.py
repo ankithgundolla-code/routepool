@@ -34,15 +34,6 @@ INSTALLED_APPS = [
     'analytics',
 ]
 
-# Conditionally add GeoDjango if available in the runtime environment (requires GDAL/GEOS C-libraries)
-try:
-    from django.contrib.gis.gdal import HAS_GDAL
-    from django.contrib.gis.geos import HAS_GEOS
-    if HAS_GDAL and HAS_GEOS:
-        INSTALLED_APPS.append('django.contrib.gis')
-except Exception:
-    pass
-
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',

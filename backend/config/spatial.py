@@ -1,127 +1,111 @@
 """
 RoutePool PostGIS & Spatial Geometry Architecture.
-Provides native PostGIS PointField & LineStringField for PostgreSQL/PostGIS databases,
-paired with a resilient fallback mechanism for local development.
+Provides SQLite-compatible PointField & LineStringField fallbacks using standard Django models.JSONField.
 """
 from typing import Optional, List, Tuple
 import math
+from django.db import models
 
-try:
-    from django.contrib.gis.db import models as gis_models
-    from django.contrib.gis.geos import Point as GeoPoint, LineString as GeoLineString
-    HAS_GEODJANGO = True
-except (ImportError, Exception):
-    gis_models = None
-    GeoPoint = None
-    GeoLineString = None
-    HAS_GEODJANGO = False
 
-if HAS_GEODJANGO and gis_models is not None:
-    PointField = gis_models.PointField
-    LineStringField = gis_models.LineStringField
-    Point = GeoPoint
-    LineString = GeoLineString
-else:
-    from django.db import models
+class PointField(models.JSONField):
+    """
+    Standard SQLite-compatible spatial Point field storing GeoJSON / [lng, lat] coordinate pairs.
+    """
+    description = "Geographic Point fallback field (longitude, latitude)"
 
-    class PointField(models.JSONField):
-        """
-        Fallback spatial Point field storing GeoJSON / [lng, lat] coordinate pairs
-        when PostGIS C-libraries (GEOS/GDAL) are not linked in the local environment.
-        In PostGIS/PostgreSQL, django.contrib.gis.db.models.PointField is used.
-        """
-        description = "Geographic Point fallback field (longitude, latitude)"
+    def __init__(self, *args, **kwargs):
+        kwargs.pop('geography', None)
+        kwargs.pop('srid', None)
+        kwargs.pop('spatial_index', None)
+        kwargs.setdefault('null', True)
+        kwargs.setdefault('blank', True)
+        super().__init__(*args, **kwargs)
 
-        def __init__(self, *args, **kwargs):
-            kwargs.pop('geography', None)
-            kwargs.pop('srid', None)
-            kwargs.pop('spatial_index', None)
-            kwargs.setdefault('null', True)
-            kwargs.setdefault('blank', True)
-            super().__init__(*args, **kwargs)
+    def get_prep_value(self, value):
+        if value is None:
+            return None
+        if hasattr(value, 'to_dict'):
+            value = value.to_dict()
+        elif hasattr(value, 'coords'):
+            value = {'type': 'Point', 'coordinates': list(value.coords)}
+        return super().get_prep_value(value)
 
-        def get_prep_value(self, value):
-            if value is None:
-                return None
-            if hasattr(value, 'to_dict'):
-                value = value.to_dict()
-            elif hasattr(value, 'coords'):
-                value = {'type': 'Point', 'coordinates': list(value.coords)}
-            return super().get_prep_value(value)
+    def from_db_value(self, value, expression, connection):
+        data = super().from_db_value(value, expression, connection)
+        if data and isinstance(data, dict) and data.get('coordinates'):
+            coords = data['coordinates']
+            return Point(coords[0], coords[1])
+        return data
 
-        def from_db_value(self, value, expression, connection):
-            data = super().from_db_value(value, expression, connection)
-            if data and isinstance(data, dict) and data.get('coordinates'):
-                coords = data['coordinates']
-                return Point(coords[0], coords[1])
-            return data
 
-    class LineStringField(models.JSONField):
-        """
-        Fallback spatial LineString field storing polyline coordinates
-        when PostGIS C-libraries (GEOS/GDAL) are not linked in the local environment.
-        """
-        description = "Geographic LineString fallback field (corridor polyline)"
+class LineStringField(models.JSONField):
+    """
+    Fallback spatial LineString field storing polyline coordinates
+    when PostGIS C-libraries (GEOS/GDAL) are not linked in the local environment.
+    """
+    description = "Geographic LineString fallback field (corridor polyline)"
 
-        def __init__(self, *args, **kwargs):
-            kwargs.pop('geography', None)
-            kwargs.pop('srid', None)
-            kwargs.pop('spatial_index', None)
-            kwargs.setdefault('null', True)
-            kwargs.setdefault('blank', True)
-            super().__init__(*args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        kwargs.pop('geography', None)
+        kwargs.pop('srid', None)
+        kwargs.pop('spatial_index', None)
+        kwargs.setdefault('null', True)
+        kwargs.setdefault('blank', True)
+        super().__init__(*args, **kwargs)
 
-        def get_prep_value(self, value):
-            if value is None:
-                return None
-            if hasattr(value, 'to_dict'):
-                value = value.to_dict()
-            elif hasattr(value, 'coords'):
-                value = {'type': 'LineString', 'coordinates': [list(c) for c in value.coords]}
-            return super().get_prep_value(value)
+    def get_prep_value(self, value):
+        if value is None:
+            return None
+        if hasattr(value, 'to_dict'):
+            value = value.to_dict()
+        elif hasattr(value, 'coords'):
+            value = {'type': 'LineString', 'coordinates': [list(c) for c in value.coords]}
+        return super().get_prep_value(value)
 
-        def from_db_value(self, value, expression, connection):
-            data = super().from_db_value(value, expression, connection)
-            if data and isinstance(data, dict) and data.get('coordinates'):
-                return LineString(data['coordinates'])
-            return data
+    def from_db_value(self, value, expression, connection):
+        data = super().from_db_value(value, expression, connection)
+        if data and isinstance(data, dict) and data.get('coordinates'):
+            return LineString(data['coordinates'])
+        return data
 
-    class Point:
-        """Lightweight Point object compatible with GEOS Point (x=lng, y=lat)."""
-        def __init__(self, x: float = 0.0, y: float = 0.0, srid: int = 4326):
-            self.x = float(x)  # Longitude
-            self.y = float(y)  # Latitude
-            self.srid = srid
 
-        @property
-        def coords(self) -> Tuple[float, float]:
-            return (self.x, self.y)
+class Point:
+    """Lightweight Point object compatible with GEOS Point (x=lng, y=lat)."""
+    def __init__(self, x: float = 0.0, y: float = 0.0, srid: int = 4326):
+        self.x = float(x)  # Longitude
+        self.y = float(y)  # Latitude
+        self.srid = srid
 
-        def to_dict(self):
-            return {'type': 'Point', 'coordinates': [self.x, self.y], 'srid': self.srid}
+    @property
+    def coords(self) -> Tuple[float, float]:
+        return (self.x, self.y)
 
-        def __iter__(self):
-            yield self.x
-            yield self.y
+    def to_dict(self):
+        return {'type': 'Point', 'coordinates': [self.x, self.y], 'srid': self.srid}
 
-        def __repr__(self):
-            return f"POINT ({self.x} {self.y})"
+    def __iter__(self):
+        yield self.x
+        yield self.y
 
-    class LineString:
-        """Lightweight LineString object compatible with GEOS LineString."""
-        def __init__(self, coords: Optional[List[Tuple[float, float]]] = None, srid: int = 4326):
-            self.coords = list(coords or [])
-            self.srid = srid
+    def __repr__(self):
+        return f"POINT ({self.x} {self.y})"
 
-        def to_dict(self):
-            return {'type': 'LineString', 'coordinates': self.coords, 'srid': self.srid}
 
-        def __iter__(self):
-            return iter(self.coords)
+class LineString:
+    """Lightweight LineString object compatible with GEOS LineString."""
+    def __init__(self, coords: Optional[List[Tuple[float, float]]] = None, srid: int = 4326):
+        self.coords = list(coords or [])
+        self.srid = srid
 
-        def __repr__(self):
-            coords_str = ", ".join(f"{x} {y}" for x, y in self.coords)
-            return f"LINESTRING ({coords_str})"
+    def to_dict(self):
+        return {'type': 'LineString', 'coordinates': self.coords, 'srid': self.srid}
+
+    def __iter__(self):
+        return iter(self.coords)
+
+    def __repr__(self):
+        coords_str = ", ".join(f"{x} {y}" for x, y in self.coords)
+        return f"LINESTRING ({coords_str})"
 
 
 def create_point(lat: Optional[float], lng: Optional[float], srid: int = 4326) -> Optional[Point]:
